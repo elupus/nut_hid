@@ -1,0 +1,7 @@
+[package]
+name = "nut_hid_device"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+modular-bitfield = "0.12.0"
