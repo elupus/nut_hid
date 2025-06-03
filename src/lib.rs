@@ -261,13 +261,12 @@ extern "C" fn evt_io_device_control(
         &mut request,
         io_control_code,
         device_context,
-            ) {
-        Ok(()) => status = STATUS_SUCCESS,
-        Err(e) => status = e,
+    ) {
+        Ok(()) => (),
+        Err(e) => request.complete(e)
     }
 
-    request.complete(status);
-    }
+}
 
 fn get_report(memory: &WdfMemory) -> Result<(u8, &[u8]), NTSTATUS> {
     let buffer = memory.get_buffer();
@@ -444,36 +443,47 @@ fn evt_io_device_control_internal(
     match io_control_code {
         IOCTL_HID_GET_DEVICE_DESCRIPTOR => {
             request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_desc))?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_GET_DEVICE_ATTRIBUTES => {
-            request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_attr))?
+            request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_attr))?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_GET_REPORT_DESCRIPTOR => {
-            request_copy_from_slice(request, &device_context.hid_device.data().report_descriptor)?
+            request_copy_from_slice(request, &device_context.hid_device.data().report_descriptor)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_GET_STRING => {
             get_string(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_GET_INDEXED_STRING => {
             get_indexed_string(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_READ_REPORT => {
             read_report(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_WRITE_REPORT => {
             write_report(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_UMDF_HID_GET_FEATURE => {
             get_feature(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_UMDF_HID_SET_FEATURE => {
             set_feature(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_UMDF_HID_GET_INPUT_REPORT => {
             get_input_report(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         IOCTL_UMDF_HID_SET_OUTPUT_REPORT => {
             set_output_report(request, device_context)?;
+            request.complete(STATUS_SUCCESS);
         }
         _ => {
             println!("Unsupported control");
