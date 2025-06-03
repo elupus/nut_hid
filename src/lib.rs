@@ -16,15 +16,15 @@ mod hid;
 mod wdf;
 
 use hid::*;
-use nut_hid_device::*;
+use nut_hid_device::{nut::NutDevice, *};
 use wdf::*;
 
 use std::ffi::OsStr;
 
-struct DeviceContext {
+struct DeviceContext<'a> {
     device: WDFDEVICE,
     queue: WDFQUEUE,
-    hid_device: Device,
+    hid_device: Box<dyn Device + 'a>,
     hid_device_desc: HID_DESCRIPTOR,
     hid_device_attr: HID_DEVICE_ATTRIBUTES,
 }
@@ -37,7 +37,7 @@ const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEX
     EvtDriverGetUniqueContextType: None,
 };
 
-impl WdfContext for DeviceContext {
+impl WdfContext for DeviceContext<'_> {
     fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO {
         &DEVICE_CONTEXT_TYPE_INFO
     }
@@ -175,9 +175,10 @@ extern "C" fn evt_driver_device_add(
     };
 
     println!("Build hid descriptors");
-    let hid_device = nut_hid_device::nut::new_nut_device();
+    let hid_device  = Box::new(nut_hid_device::nut::new_nut_device());
+    let hid_data = hid_device.data();
 
-    let hid_report_desc = &hid_device.report_descriptor;
+    let hid_report_desc = &hid_data.report_descriptor;
 
     let hid_device_desc = HID_DESCRIPTOR {
         bLength: 0x09,
@@ -194,9 +195,9 @@ extern "C" fn evt_driver_device_add(
 
     let hid_device_attr = HID_DEVICE_ATTRIBUTES {
         Size: size_of::<HID_DEVICE_ATTRIBUTES>() as u32,
-        VendorID: hid_device.vendor_id,
-        ProductID: hid_device.product_id,
-        VersionNumber: hid_device.version,
+        VendorID: hid_data.vendor_id,
+        ProductID: hid_data.product_id,
+        VersionNumber: hid_data.version,
         ..HID_DEVICE_ATTRIBUTES::default()
     };
 
@@ -341,17 +342,17 @@ fn get_string(request: &mut WdfRequest, device_contex: &mut DeviceContext) -> Re
 
     println!("get_string {string_id}");
 
-    let hid_device = &device_contex.hid_device;
+    let data = &device_contex.hid_device.data();
     let value;
     match string_id {
         HID_STRING_ID_IMANUFACTURER => {
-            value = &hid_device.manufacturer;
+            value = &data.manufacturer;
         }
         HID_STRING_ID_IPRODUCT => {
-            value = &hid_device.product;
+            value = &data.product;
         }
         HID_STRING_ID_ISERIALNUMBER => {
-            value = &hid_device.serial_number;
+            value = &data.serial_number;
         }
         _ => return Err(STATUS_NOT_IMPLEMENTED),
     }
@@ -367,7 +368,7 @@ fn get_indexed_string(
 
     println!("get_indexed_string {string_id}");
 
-    let strings = &device_contex.hid_device.strings;
+    let strings = &device_contex.hid_device.data().strings;
     let data = strings
         .get(&(string_id as u8))
         .ok_or(STATUS_INVALID_PARAMETER)?;
@@ -402,7 +403,7 @@ fn get_report_internal(
     let mut output_memory = request.get_output_memory()?;
     let mut offset = 0;
 
-    let reports = &device_contex.hid_device.reports;
+    let reports = &device_contex.hid_device.data().reports;
     let data = reports.get(&report_id).ok_or(STATUS_INVALID_PARAMETER)?;
     offset += output_memory.copy_from_slice(slice::from_ref(&report_id), offset)?;
     offset += output_memory.copy_from_slice(data, offset)?;
@@ -436,7 +437,7 @@ fn set_report_internal(
 
     println!("set_report_internal {report_id}");
 
-    let reports = &mut device_contex.hid_device.reports;
+    let reports = &mut device_contex.hid_device.data_mut().reports;
     reports.remove(&report_id);
     reports.insert(report_id, report.to_vec());
 
@@ -475,7 +476,7 @@ fn evt_io_device_control_internal(
             request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_attr))?
         }
         IOCTL_HID_GET_REPORT_DESCRIPTOR => {
-            request_copy_from_slice(request, &device_context.hid_device.report_descriptor)?
+            request_copy_from_slice(request, &device_context.hid_device.data().report_descriptor)?
         }
         IOCTL_HID_GET_STRING => {
             get_string(request, device_context)?;

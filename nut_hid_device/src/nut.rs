@@ -255,11 +255,28 @@ struct PresentStatus {
     unused2: B1,
 }
 
-
-
-pub fn new_nut_device() -> Device
+pub struct NutDevice
 {
-    let mut device = Device {
+    device: DeviceData
+}
+
+impl Device for NutDevice {
+    fn data(&self) -> &DeviceData {
+        &self.device
+    }
+
+    fn data_mut(&mut self) -> &mut DeviceData {
+        &mut self.device
+    }
+
+    fn read(&self) -> Option<(u8, Vec<u8>)> {
+        None
+    }
+}
+
+pub fn new_nut_device() -> NutDevice
+{
+    let mut device = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
         vendor_id: NUT_HID_VID,
@@ -288,7 +305,7 @@ pub fn new_nut_device() -> Device
     device.reports.insert(REPORT_ID_REMAININGCAPACITY, [90].into());
     device.reports.insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    device
+    NutDevice {device}
 }
 
 

@@ -3,7 +3,7 @@ pub mod constants;
 pub mod nut;
 pub mod mini;
 
-pub struct Device {
+pub struct DeviceData {
     pub reports: HashMap<u8, Vec<u8>>,
     pub strings: HashMap<u8, String>,
     pub vendor_id: u16,
@@ -13,4 +13,10 @@ pub struct Device {
     pub serial_number: String,
     pub product: String,
     pub report_descriptor: Vec<u8>,
+}
+
+pub trait Device {
+    fn data_mut(&mut self) -> &mut DeviceData;
+    fn data(&self) -> &DeviceData;
+    fn read(&self) -> Option<(u8, Vec<u8>)>;
 }

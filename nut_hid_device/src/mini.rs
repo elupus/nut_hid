@@ -61,9 +61,28 @@ pub const HID_MINI_REPORT_DESCRIPTOR: &[u8] = &[
 ];
 
 
-pub fn new_mini_device() -> Device
+pub struct MiniDevice
 {
-    Device {
+    device: DeviceData
+}
+
+impl Device for MiniDevice {
+    fn data(&self) -> &DeviceData {
+        &self.device
+    }
+
+    fn data_mut(&mut self) -> &mut DeviceData {
+        &mut self.device
+    }
+
+    fn read(&self) -> Option<(u8, Vec<u8>)> {
+        None
+    }
+}
+
+pub fn new_mini_device() -> MiniDevice
+{
+    let data = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
         vendor_id: 0xDEED,
@@ -73,5 +92,6 @@ pub fn new_mini_device() -> Device
         serial_number: NUT_HID_SERIALNUMBER.into(),
         product: NUT_HID_PRODUCT.into(),
         report_descriptor: HID_MINI_REPORT_DESCRIPTOR.into(),
-    }
+    };
+    MiniDevice { device: data }
 }
