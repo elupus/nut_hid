@@ -75,7 +75,7 @@ impl Device for MiniDevice {
         &mut self.device
     }
 
-    fn read(&self) -> Option<(u8, Vec<u8>)> {
+    fn read(&mut self) -> Option<(u8, Vec<u8>)> {
         None
     }
 }

@@ -3,6 +3,8 @@ pub mod constants;
 pub mod nut;
 pub mod mini;
 
+#[derive(Default)]
+
 pub struct DeviceData {
     pub reports: HashMap<u8, Vec<u8>>,
     pub strings: HashMap<u8, String>,
@@ -18,5 +20,5 @@ pub struct DeviceData {
 pub trait Device {
     fn data_mut(&mut self) -> &mut DeviceData;
     fn data(&self) -> &DeviceData;
-    fn read(&self) -> Option<(u8, Vec<u8>)>;
+    fn read(&mut self) -> Option<(u8, Vec<u8>)>;
 }

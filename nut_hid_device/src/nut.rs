@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::{HashMap, VecDeque}};
 
 use modular_bitfield::{bitfield, prelude::B1};
 use constants::*;
@@ -255,9 +255,11 @@ struct PresentStatus {
     unused2: B1,
 }
 
+#[derive(Default)]
 pub struct NutDevice
 {
-    device: DeviceData
+    device: DeviceData,
+    pending: VecDeque<(u8, Vec<u8>)>,
 }
 
 impl Device for NutDevice {
@@ -269,7 +271,11 @@ impl Device for NutDevice {
         &mut self.device
     }
 
-    fn read(&self) -> Option<(u8, Vec<u8>)> {
+    fn read(&mut self) -> Option<(u8, Vec<u8>)> {
+        /* push out all pending */
+        if let Some(report) = self.pending.pop_front() {
+            return Some(report)
+        }
         None
     }
 }
@@ -305,7 +311,7 @@ pub fn new_nut_device() -> NutDevice
     device.reports.insert(REPORT_ID_REMAININGCAPACITY, [90].into());
     device.reports.insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    NutDevice {device}
+    NutDevice {device, ..Default::default()}
 }
 
 
