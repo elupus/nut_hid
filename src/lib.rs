@@ -22,8 +22,6 @@ use wdf::*;
 use std::ffi::OsStr;
 
 struct DeviceContext<'a> {
-    device: WDFDEVICE,
-    queue: WDFQUEUE,
     hid_device: Box<dyn Device + 'a>,
     hid_device_desc: HID_DESCRIPTOR,
     hid_device_attr: HID_DEVICE_ATTRIBUTES,
@@ -40,25 +38,6 @@ const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEX
 impl WdfContext for DeviceContext<'_> {
     fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO {
         &DEVICE_CONTEXT_TYPE_INFO
-    }
-}
-
-struct QueueContext {
-    queue: WDFQUEUE,
-    device: WDFDEVICE,
-}
-
-const QUEUE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEXT_TYPE_INFO {
-    Size: core::mem::size_of::<WDF_OBJECT_CONTEXT_TYPE_INFO>() as ULONG,
-    ContextName: c"QueueContext".as_ptr(),
-    ContextSize: core::mem::size_of::<QueueContext>(),
-    UniqueType: std::ptr::null(),
-    EvtDriverGetUniqueContextType: None,
-};
-
-impl WdfContext for QueueContext {
-    fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO {
-        &QUEUE_CONTEXT_TYPE_INFO
     }
 }
 
@@ -203,8 +182,6 @@ extern "C" fn evt_driver_device_add(
 
     println!("Creating device context for: {:#?}, {:#?}", hid_device_desc, hid_device_attr);
     let context = DeviceContext {
-        device: device,
-        queue: queue,
         hid_device: hid_device,
         hid_device_desc: hid_device_desc,
         hid_device_attr: hid_device_attr,
@@ -278,22 +255,19 @@ extern "C" fn evt_io_device_control(
     }
 
     let device_context = wdf_get_context::<DeviceContext>(device.cast());
-    let queue_context = wdf_get_context::<QueueContext>(queue.cast());
-    let status: NTSTATUS;
     let mut request = WdfRequest(request);
 
     match evt_io_device_control_internal(
         &mut request,
         io_control_code,
         device_context,
-        queue_context,
-    ) {
+            ) {
         Ok(()) => status = STATUS_SUCCESS,
         Err(e) => status = e,
     }
 
     request.complete(status);
-}
+    }
 
 fn get_report(memory: &WdfMemory) -> Result<(u8, &[u8]), NTSTATUS> {
     let buffer = memory.get_buffer();
@@ -463,8 +437,7 @@ fn set_feature(
 fn evt_io_device_control_internal(
     request: &mut WdfRequest,
     io_control_code: ULONG,
-    device_context: &mut DeviceContext,
-    _queue_context: &mut QueueContext,
+    device_context: &mut DeviceContext
 ) -> Result<(), NTSTATUS> {
     println!("io device control {io_control_code}");
 
@@ -514,7 +487,6 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
     let mut config = wdf_io_queue_config_init_default_queue(
         _WDF_IO_QUEUE_DISPATCH_TYPE::WdfIoQueueDispatchParallel,
     );
-    let mut attributes = QueueContext::get_object_attributes();
     let mut queue: WDFQUEUE = WDF_NO_HANDLE.cast();
 
     config.EvtIoDeviceControl = Some(evt_io_device_control);
@@ -531,7 +503,7 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
             WdfIoQueueCreate,
             device,
             &mut config,
-            &mut attributes,
+            WDF_NO_OBJECT_ATTRIBUTES,
             &mut queue,
         );
         if NT_ERROR(status) {
@@ -540,13 +512,6 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
         }
         assert!(!queue.is_null());
     }
-
-    println!("Create queue context");
-    let context = QueueContext {
-        queue: queue,
-        device: device,
-    };
-    wdf_init_context::<QueueContext>(queue.cast(), context);
 
     return Ok(queue);
 }
