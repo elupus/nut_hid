@@ -39,7 +39,7 @@
             "args": [
                 "-t",
                 "${config:nut-hid.target_host}",
-                "${config:nut-hid.target_host}\\add.bat"
+                "${config:nut-hid.target_path}\\add.bat"
             ],
             "isBackground": true,
             "problemMatcher": [],
