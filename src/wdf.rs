@@ -31,8 +31,7 @@ pub fn wdf_object_attributes_init_context_type(
 
 pub trait WdfContext {
     fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO;
-    fn get_object_attributes() -> WDF_OBJECT_ATTRIBUTES
-    {
+    fn get_object_attributes() -> WDF_OBJECT_ATTRIBUTES {
         wdf_object_attributes_init_context_type(Self::get_type_info())
     }
 }

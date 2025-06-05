@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, VecDeque}};
+use std::collections::{HashMap, VecDeque};
 
-use modular_bitfield::{bitfield, prelude::B1};
-use constants::*;
 use super::*;
+use constants::*;
+use modular_bitfield::{bitfield, prelude::B1};
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
 pub const STRING_ID_PRODUCT: u8 = 0x02;
@@ -256,8 +256,7 @@ struct PresentStatus {
 }
 
 #[derive(Default)]
-pub struct NutDevice
-{
+pub struct NutDevice {
     device: DeviceData,
     pending: VecDeque<(u8, Vec<u8>)>,
 }
@@ -274,14 +273,13 @@ impl Device for NutDevice {
     fn read(&mut self) -> Option<(u8, Vec<u8>)> {
         /* push out all pending */
         if let Some(report) = self.pending.pop_front() {
-            return Some(report)
+            return Some(report);
         }
         None
     }
 }
 
-pub fn new_nut_device() -> NutDevice
-{
+pub fn new_nut_device() -> NutDevice {
     let mut device = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
@@ -294,26 +292,44 @@ pub fn new_nut_device() -> NutDevice
         report_descriptor: UPS_REPORT_DESCRIPTOR.into(),
     };
 
-    device.reports.insert(REPORT_ID_IPRODUCT, [STRING_ID_PRODUCT].into());
-    device.reports.insert(REPORT_ID_ISERIALNUMBER, [STRING_ID_SERIAL].into());
-    device.reports.insert(REPORT_ID_IMANUFACTURER, [STRING_ID_MANUFACTURER].into());
+    device
+        .reports
+        .insert(REPORT_ID_IPRODUCT, [STRING_ID_PRODUCT].into());
+    device
+        .reports
+        .insert(REPORT_ID_ISERIALNUMBER, [STRING_ID_SERIAL].into());
+    device
+        .reports
+        .insert(REPORT_ID_IMANUFACTURER, [STRING_ID_MANUFACTURER].into());
 
-
-    device.reports.insert(REPORT_ID_PRESENTSTATUS, PresentStatus::new()
-        .with_ac_present(1)
-        .with_battery_present(1)
-        .into_bytes()
-        .into());
+    device.reports.insert(
+        REPORT_ID_PRESENTSTATUS,
+        PresentStatus::new()
+            .with_ac_present(1)
+            .with_battery_present(1)
+            .into_bytes()
+            .into(),
+    );
     device.reports.insert(REPORT_ID_CAPACITYMODE, [2].into()); /* Percentage */
 
-    device.reports.insert(REPORT_ID_DESIGNCAPACITY, [100].into());
-    device.reports.insert(REPORT_ID_FULLCHRGECAPACITY, [100].into());
-    device.reports.insert(REPORT_ID_REMAININGCAPACITY, [90].into());
-    device.reports.insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
+    device
+        .reports
+        .insert(REPORT_ID_DESIGNCAPACITY, [100].into());
+    device
+        .reports
+        .insert(REPORT_ID_FULLCHRGECAPACITY, [100].into());
+    device
+        .reports
+        .insert(REPORT_ID_REMAININGCAPACITY, [90].into());
+    device
+        .reports
+        .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    NutDevice {device, ..Default::default()}
+    NutDevice {
+        device,
+        ..Default::default()
+    }
 }
-
 
 #[cfg(test)]
 mod tests {

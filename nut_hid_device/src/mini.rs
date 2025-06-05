@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use constants::*;
 use super::*;
+use constants::*;
 
 #[repr(C, packed(1))]
 #[derive(Debug, Copy, Clone)]
@@ -60,10 +60,8 @@ pub const HID_MINI_REPORT_DESCRIPTOR: &[u8] = &[
     0xC0,                           // END_COLLECTION
 ];
 
-
-pub struct MiniDevice
-{
-    device: DeviceData
+pub struct MiniDevice {
+    device: DeviceData,
 }
 
 impl Device for MiniDevice {
@@ -80,8 +78,7 @@ impl Device for MiniDevice {
     }
 }
 
-pub fn new_mini_device() -> MiniDevice
-{
+pub fn new_mini_device() -> MiniDevice {
     let data = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),

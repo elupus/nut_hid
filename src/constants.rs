@@ -1,4 +1,3 @@
-
 pub const HIDMINI_PID: u16 = 0xFEED;
 pub const HIDMINI_VID: u16 = 0xDEED;
 pub const HIDMINI_VERSION: u16 = 0x0101;

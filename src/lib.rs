@@ -16,7 +16,7 @@ mod hid;
 mod wdf;
 
 use hid::*;
-use nut_hid_device::{nut::NutDevice, *};
+use nut_hid_device::*;
 use wdf::*;
 
 use std::ffi::OsStr;
@@ -154,7 +154,7 @@ extern "C" fn evt_driver_device_add(
     };
 
     println!("Build hid descriptors");
-    let hid_device  = Box::new(nut_hid_device::nut::new_nut_device());
+    let hid_device = Box::new(nut_hid_device::nut::new_nut_device());
     let hid_data = hid_device.data();
 
     let hid_report_desc = &hid_data.report_descriptor;
@@ -180,7 +180,10 @@ extern "C" fn evt_driver_device_add(
         ..HID_DEVICE_ATTRIBUTES::default()
     };
 
-    println!("Creating device context for: {:#?}, {:#?}", hid_device_desc, hid_device_attr);
+    println!(
+        "Creating device context for: {:#?}, {:#?}",
+        hid_device_desc, hid_device_attr
+    );
     let context = DeviceContext {
         hid_device: hid_device,
         hid_device_desc: hid_device_desc,
@@ -257,15 +260,10 @@ extern "C" fn evt_io_device_control(
     let device_context = wdf_get_context::<DeviceContext>(device.cast());
     let mut request = WdfRequest(request);
 
-    match evt_io_device_control_internal(
-        &mut request,
-        io_control_code,
-        device_context,
-    ) {
+    match evt_io_device_control_internal(&mut request, io_control_code, device_context) {
         Ok(()) => (),
-        Err(e) => request.complete(e)
+        Err(e) => request.complete(e),
     }
-
 }
 
 fn get_report(memory: &WdfMemory) -> Result<(u8, &[u8]), NTSTATUS> {
@@ -436,7 +434,7 @@ fn set_feature(
 fn evt_io_device_control_internal(
     request: &mut WdfRequest,
     io_control_code: ULONG,
-    device_context: &mut DeviceContext
+    device_context: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
     println!("io device control {io_control_code}");
 
