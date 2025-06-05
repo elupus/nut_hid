@@ -1,5 +1,5 @@
-use std::collections::{HashMap};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread;
 use std::time::Duration;
 
@@ -260,7 +260,7 @@ struct PresentStatus {
 
 pub struct NutDevice {
     device: DeviceData,
-    receiver: Receiver<(u8, Vec<u8>)>
+    receiver: Receiver<(u8, Vec<u8>)>,
 }
 
 impl Device for NutDevice {
@@ -328,29 +328,36 @@ pub fn new_nut_device() -> NutDevice {
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
     println!("Spawning worker thread");
-    let (sender, receiver): (SyncSender::<(u8, Vec<u8>)>, _) = sync_channel(10);
+    let (sender, receiver): (SyncSender<(u8, Vec<u8>)>, _) = sync_channel(10);
     thread::spawn(move || {
         println!("Worker thread started");
         loop {
             println!("Loop");
-            sender.send((REPORT_ID_REMAININGCAPACITY, vec![80])).unwrap();
+            sender
+                .send((REPORT_ID_REMAININGCAPACITY, vec![80]))
+                .unwrap();
             thread::sleep(Duration::from_secs(3));
-            sender.send((REPORT_ID_REMAININGCAPACITY, vec![50])).unwrap();
+            sender
+                .send((REPORT_ID_REMAININGCAPACITY, vec![50]))
+                .unwrap();
             thread::sleep(Duration::from_secs(3));
-            sender.send((REPORT_ID_REMAININGCAPACITY, vec![30])).unwrap();
+            sender
+                .send((REPORT_ID_REMAININGCAPACITY, vec![30]))
+                .unwrap();
             thread::sleep(Duration::from_secs(3));
-            sender.send((REPORT_ID_REMAININGCAPACITY, vec![60])).unwrap();
+            sender
+                .send((REPORT_ID_REMAININGCAPACITY, vec![60]))
+                .unwrap();
             thread::sleep(Duration::from_secs(3));
-            sender.send((REPORT_ID_REMAININGCAPACITY, vec![90])).unwrap();
+            sender
+                .send((REPORT_ID_REMAININGCAPACITY, vec![90]))
+                .unwrap();
             thread::sleep(Duration::from_secs(3));
         }
         //drop(sender);
     });
 
-    NutDevice {
-        device,
-        receiver
-    }
+    NutDevice { device, receiver }
 }
 
 #[cfg(test)]

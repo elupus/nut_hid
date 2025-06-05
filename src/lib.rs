@@ -352,13 +352,12 @@ fn read_report(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-
     match device_contex.hid_device.read() {
         Some((report_id, report)) => {
             println!("read_report -> {report_id}");
             copy_report_to_output(request, report_id, &report)?;
             Ok(())
-        },
+        }
         None => {
             println!("read_report -> None");
             Err(STATUS_NOT_IMPLEMENTED)
@@ -370,14 +369,16 @@ fn write_report(
     _request: &mut WdfRequest,
     _device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-
     println!("write_report");
 
     Err(STATUS_NOT_IMPLEMENTED)
 }
 
-fn copy_report_to_output(request: &mut WdfRequest, report_id: u8, report: &[u8]) -> Result<(), NTSTATUS>
-{
+fn copy_report_to_output(
+    request: &mut WdfRequest,
+    report_id: u8,
+    report: &[u8],
+) -> Result<(), NTSTATUS> {
     let mut offset = 0;
     let mut memory = request.get_output_memory()?;
     offset += memory.copy_from_slice(slice::from_ref(&report_id), offset)?;
