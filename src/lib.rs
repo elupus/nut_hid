@@ -358,6 +358,12 @@ fn read_report(
         Some((report_id, report)) => {
             debug!("read_report -> {report_id}");
             copy_report_to_output(request, report_id, &report)?;
+
+            /* for now just update the reports */
+            let reports = &mut device_contex.hid_device.data_mut().reports;
+            reports.remove(&report_id);
+            reports.insert(report_id, report);
+        
             Ok(())
         }
         None => {
