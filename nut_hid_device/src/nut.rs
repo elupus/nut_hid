@@ -327,8 +327,10 @@ pub fn new_nut_device() -> NutDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
+    println!("Spawning worker thread");
     let (sender, receiver): (SyncSender::<(u8, Vec<u8>)>, _) = sync_channel(10);
     thread::spawn(move || {
+        println!("Worker thread started");
         loop {
             println!("Loop");
             sender.send((REPORT_ID_REMAININGCAPACITY, vec![80])).unwrap();

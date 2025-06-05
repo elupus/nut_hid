@@ -352,12 +352,17 @@ fn read_report(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
+
     match device_contex.hid_device.read() {
         Some((report_id, report)) => {
+            println!("read_report -> {report_id}");
             copy_report_to_output(request, report_id, &report)?;
             Ok(())
         },
-        None => Err(STATUS_NOT_IMPLEMENTED)
+        None => {
+            println!("read_report -> None");
+            Err(STATUS_NOT_IMPLEMENTED)
+        }
     }
 }
 
@@ -365,6 +370,9 @@ fn write_report(
     _request: &mut WdfRequest,
     _device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
+
+    println!("write_report");
+
     Err(STATUS_NOT_IMPLEMENTED)
 }
 
