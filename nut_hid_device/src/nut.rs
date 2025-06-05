@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use super::*;
 use constants::*;
+use log::{debug, info};
 use modular_bitfield::{bitfield, prelude::B1};
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
@@ -327,12 +328,12 @@ pub fn new_nut_device() -> NutDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    println!("Spawning worker thread");
+    info!("Spawning worker thread");
     let (sender, receiver): (SyncSender<(u8, Vec<u8>)>, _) = sync_channel(10);
     thread::spawn(move || {
-        println!("Worker thread started");
+        info!("Worker thread started");
         loop {
-            println!("Loop");
+            debug!("Loop");
             sender
                 .send((REPORT_ID_REMAININGCAPACITY, vec![80]))
                 .unwrap();

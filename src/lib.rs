@@ -10,12 +10,13 @@ use wdk_sys::{
     WDFDEVICE_INIT, WDFDRIVER, WDFOBJECT, WDFQUEUE, WDFREQUEST, call_unsafe_wdf_function_binding,
 };
 
-use wdk::println;
 mod constants;
 mod hid;
+mod logger;
 mod wdf;
 
 use hid::*;
+use log::{debug, info, warn};
 use nut_hid_device::*;
 use wdf::*;
 
@@ -89,12 +90,12 @@ fn wdf_io_queue_config_init_default_queue(
 }
 
 unsafe extern "C" fn evt_wdf_device_context_cleanup(object: WDFOBJECT) {
-    println!("EvtWdfDeviceContextCleanup Entered!");
+    debug!("EvtWdfDeviceContextCleanup Entered!");
     let _context = wdf_get_context::<DeviceContext>(object);
 }
 
 unsafe extern "C" fn evt_wdf_device_context_destroy(object: WDFOBJECT) {
-    println!("EvtWdfDeviceContextDestroy Entered!");
+    debug!("EvtWdfDeviceContextDestroy Entered!");
     let _context = wdf_get_context::<DeviceContext>(object);
 }
 
@@ -119,7 +120,7 @@ fn wdf_device_create(
         );
 
         if !NT_SUCCESS(ntstatus) {
-            println!("WdfDeviceCreate failed: {ntstatus:#02x}");
+            warn!("WdfDeviceCreate failed: {ntstatus:#02x}");
             return Err(ntstatus);
         }
         assert!(!device.is_null());
@@ -131,7 +132,7 @@ extern "C" fn evt_driver_device_add(
     _driver: WDFDRIVER,
     device_init: *mut WDFDEVICE_INIT,
 ) -> NTSTATUS {
-    println!("EvtDriverDeviceAdd Entered!");
+    debug!("EvtDriverDeviceAdd Entered!");
 
     let mut attributes = DeviceContext::get_object_attributes();
     attributes.EvtCleanupCallback = Some(evt_wdf_device_context_cleanup);
@@ -141,19 +142,19 @@ extern "C" fn evt_driver_device_add(
         call_unsafe_wdf_function_binding!(WdfFdoInitSetFilter, device_init);
     }
 
-    println!("Creating device");
+    debug!("Creating device");
     let device = match wdf_device_create(device_init, &mut attributes) {
         Err(status) => return status,
         Ok(device) => device,
     };
 
-    println!("Creating default queue");
+    debug!("Creating default queue");
     let queue = match create_default_queue(device) {
         Err(status) => return status,
         Ok(queue) => queue,
     };
 
-    println!("Build hid descriptors");
+    debug!("Build hid descriptors");
     let hid_device = Box::new(nut_hid_device::nut::new_nut_device());
     let hid_data = hid_device.data();
 
@@ -180,7 +181,7 @@ extern "C" fn evt_driver_device_add(
         ..HID_DEVICE_ATTRIBUTES::default()
     };
 
-    println!(
+    debug!(
         "Creating device context for: {:#?}, {:#?}",
         hid_device_desc, hid_device_attr
     );
@@ -195,8 +196,7 @@ extern "C" fn evt_driver_device_add(
 }
 
 extern "C" fn evt_driver_unload(_driver: WDFDRIVER) {
-    println!("Goodbye World!");
-    println!("Driver Exit Complete!");
+    info!("Driver Exit Complete!");
 }
 
 #[unsafe(export_name = "DriverEntry")]
@@ -204,7 +204,9 @@ pub unsafe extern "system" fn driver_entry(
     driver: PDRIVER_OBJECT,
     registry_path: PCUNICODE_STRING,
 ) -> NTSTATUS {
-    println!("Starting NUT HID Driver");
+    logger::WdkLogger::init();
+
+    info!("Starting NUT HID Driver");
 
     let mut driver_config = WDF_DRIVER_CONFIG {
         Size: core::mem::size_of::<WDF_DRIVER_CONFIG>() as ULONG,
@@ -220,7 +222,7 @@ pub unsafe extern "system" fn driver_entry(
         unicode_string_to_rust(*registry_path)
     };
 
-    println!("Registry Parameter Key: {registry_path_rust}");
+    debug!("Registry Parameter Key: {registry_path_rust}");
 
     let status;
     unsafe {
@@ -240,7 +242,7 @@ pub unsafe extern "system" fn driver_entry(
         );
     }
 
-    println!("Driver Status: {status}");
+    debug!("Driver Status: {status}");
 
     status
 }
@@ -270,7 +272,7 @@ fn get_report(memory: &WdfMemory) -> Result<(u8, &[u8]), NTSTATUS> {
     let buffer = memory.get_buffer();
     let len = buffer.len();
     if len < 1 {
-        println!("invalid input buffer length {len}");
+        debug!("invalid input buffer length {len}");
         return Err(STATUS_INVALID_BUFFER_SIZE);
     }
     Ok((buffer[0], &buffer[1..]))
@@ -311,7 +313,7 @@ fn request_copy_from_string(request: &mut WdfRequest, data: &str) -> Result<(), 
 fn get_string(request: &mut WdfRequest, device_contex: &mut DeviceContext) -> Result<(), NTSTATUS> {
     let (string_id, _) = get_string_id(&request.get_input_memory()?)?;
 
-    println!("get_string {string_id}");
+    debug!("get_string {string_id}");
 
     let data = &device_contex.hid_device.data();
     let value;
@@ -337,7 +339,7 @@ fn get_indexed_string(
 ) -> Result<(), NTSTATUS> {
     let (string_id, _) = get_string_id(&request.get_input_memory()?)?;
 
-    println!("get_indexed_string {string_id}");
+    debug!("get_indexed_string {string_id}");
 
     let strings = &device_contex.hid_device.data().strings;
     let data = strings
@@ -354,12 +356,12 @@ fn read_report(
 ) -> Result<(), NTSTATUS> {
     match device_contex.hid_device.read() {
         Some((report_id, report)) => {
-            println!("read_report -> {report_id}");
+            debug!("read_report -> {report_id}");
             copy_report_to_output(request, report_id, &report)?;
             Ok(())
         }
         None => {
-            println!("read_report -> None");
+            debug!("read_report -> None");
             Err(STATUS_NOT_IMPLEMENTED)
         }
     }
@@ -369,7 +371,7 @@ fn write_report(
     _request: &mut WdfRequest,
     _device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("write_report");
+    debug!("write_report");
 
     Err(STATUS_NOT_IMPLEMENTED)
 }
@@ -394,7 +396,7 @@ fn get_report_internal(
     let input_memory = request.get_input_memory()?;
     let (report_id, _) = get_report(&input_memory)?;
 
-    println!("get_report_internal {report_id}");
+    debug!("get_report_internal {report_id}");
 
     let reports = &device_contex.hid_device.data().reports;
     let data = reports.get(&report_id).ok_or(STATUS_INVALID_PARAMETER)?;
@@ -408,7 +410,7 @@ fn get_feature(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("get_feature");
+    debug!("get_feature");
     get_report_internal(request, device_contex)
 }
 
@@ -416,7 +418,7 @@ fn get_input_report(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("get_feature");
+    debug!("get_feature");
     get_report_internal(request, device_contex)
 }
 
@@ -427,7 +429,7 @@ fn set_report_internal(
     let input_memory = request.get_input_memory()?;
     let (report_id, report) = get_report(&input_memory)?;
 
-    println!("set_report_internal {report_id}");
+    debug!("set_report_internal {report_id}");
 
     let reports = &mut device_contex.hid_device.data_mut().reports;
     reports.remove(&report_id);
@@ -440,7 +442,7 @@ fn set_output_report(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("set_output_report");
+    debug!("set_output_report");
     set_report_internal(request, device_contex)
 }
 
@@ -448,7 +450,7 @@ fn set_feature(
     request: &mut WdfRequest,
     device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("set_feature");
+    debug!("set_feature");
     set_report_internal(request, device_contex)
 }
 
@@ -457,7 +459,7 @@ fn evt_io_device_control_internal(
     io_control_code: ULONG,
     device_context: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    println!("io device control {io_control_code}");
+    debug!("io device control {io_control_code}");
 
     match io_control_code {
         IOCTL_HID_GET_DEVICE_DESCRIPTOR => {
@@ -505,7 +507,7 @@ fn evt_io_device_control_internal(
             request.complete(STATUS_SUCCESS);
         }
         _ => {
-            println!("Unsupported control");
+            warn!("Unsupported control");
             return Err(STATUS_NOT_IMPLEMENTED);
         }
     }
@@ -536,7 +538,7 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
             &mut queue,
         );
         if NT_ERROR(status) {
-            println!("Failed to create queue {status}");
+            warn!("Failed to create queue {status}");
             return Err(status);
         }
         assert!(!queue.is_null());

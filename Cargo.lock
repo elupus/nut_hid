@@ -388,6 +388,7 @@ dependencies = [
 name = "nut_hid_device"
 version = "0.1.0"
 dependencies = [
+ "log",
  "modular-bitfield",
 ]
 
