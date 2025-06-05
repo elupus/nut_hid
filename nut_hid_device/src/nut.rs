@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::thread;
+use std::time::Duration;
 
 use super::*;
 use constants::*;
@@ -255,10 +258,9 @@ struct PresentStatus {
     unused2: B1,
 }
 
-#[derive(Default)]
 pub struct NutDevice {
     device: DeviceData,
-    pending: VecDeque<(u8, Vec<u8>)>,
+    receiver: Receiver<(u8, Vec<u8>)>
 }
 
 impl Device for NutDevice {
@@ -271,11 +273,11 @@ impl Device for NutDevice {
     }
 
     fn read(&mut self) -> Option<(u8, Vec<u8>)> {
-        /* push out all pending */
-        if let Some(report) = self.pending.pop_front() {
-            return Some(report);
+        /* get all pending */
+        match self.receiver.try_recv() {
+            Ok(report) => Some(report),
+            Err(_) => None,
         }
-        None
     }
 }
 
@@ -325,9 +327,27 @@ pub fn new_nut_device() -> NutDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
+    let (sender, receiver): (SyncSender::<(u8, Vec<u8>)>, _) = sync_channel(10);
+    thread::spawn(move || {
+        loop {
+            println!("Loop");
+            sender.send((REPORT_ID_REMAININGCAPACITY, vec![80])).unwrap();
+            thread::sleep(Duration::from_secs(3));
+            sender.send((REPORT_ID_REMAININGCAPACITY, vec![50])).unwrap();
+            thread::sleep(Duration::from_secs(3));
+            sender.send((REPORT_ID_REMAININGCAPACITY, vec![30])).unwrap();
+            thread::sleep(Duration::from_secs(3));
+            sender.send((REPORT_ID_REMAININGCAPACITY, vec![60])).unwrap();
+            thread::sleep(Duration::from_secs(3));
+            sender.send((REPORT_ID_REMAININGCAPACITY, vec![90])).unwrap();
+            thread::sleep(Duration::from_secs(3));
+        }
+        //drop(sender);
+    });
+
     NutDevice {
         device,
-        ..Default::default()
+        receiver
     }
 }
 

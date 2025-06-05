@@ -349,10 +349,16 @@ fn get_indexed_string(
 
 // Read a pending report from device
 fn read_report(
-    _request: &mut WdfRequest,
-    _device_contex: &mut DeviceContext,
+    request: &mut WdfRequest,
+    device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
-    Err(STATUS_NOT_IMPLEMENTED)
+    match device_contex.hid_device.read() {
+        Some((report_id, report)) => {
+            copy_report_to_output(request, report_id, &report)?;
+            Ok(())
+        },
+        None => Err(STATUS_NOT_IMPLEMENTED)
+    }
 }
 
 fn write_report(
@@ -360,6 +366,16 @@ fn write_report(
     _device_contex: &mut DeviceContext,
 ) -> Result<(), NTSTATUS> {
     Err(STATUS_NOT_IMPLEMENTED)
+}
+
+fn copy_report_to_output(request: &mut WdfRequest, report_id: u8, report: &[u8]) -> Result<(), NTSTATUS>
+{
+    let mut offset = 0;
+    let mut memory = request.get_output_memory()?;
+    offset += memory.copy_from_slice(slice::from_ref(&report_id), offset)?;
+    offset += memory.copy_from_slice(report, offset)?;
+    request.set_information(offset);
+    Ok(())
 }
 
 fn get_report_internal(
@@ -371,14 +387,10 @@ fn get_report_internal(
 
     println!("get_report_internal {report_id}");
 
-    let mut output_memory = request.get_output_memory()?;
-    let mut offset = 0;
-
     let reports = &device_contex.hid_device.data().reports;
     let data = reports.get(&report_id).ok_or(STATUS_INVALID_PARAMETER)?;
-    offset += output_memory.copy_from_slice(slice::from_ref(&report_id), offset)?;
-    offset += output_memory.copy_from_slice(data, offset)?;
-    request.set_information(offset);
+
+    copy_report_to_output(request, report_id, data)?;
 
     Ok(())
 }
