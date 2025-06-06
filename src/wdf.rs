@@ -1,6 +1,8 @@
 use std::slice;
+use std::sync::Arc;
 use std::{ffi::c_void, ptr};
 
+use log::debug;
 use wdk_sys::{
     _WDF_EXECUTION_LEVEL::WdfExecutionLevelInheritFromParent,
     _WDF_SYNCHRONIZATION_SCOPE::WdfSynchronizationScopeInheritFromParent, NT_SUCCESS, NTSTATUS,
@@ -30,43 +32,48 @@ pub fn wdf_object_attributes_init_context_type(
 }
 
 pub trait WdfContext {
+    unsafe extern "C" fn destroy(object: WDFOBJECT) {
+        debug!("Destroy context!");
+        unsafe {
+            let ptr = *Self::get_raw(object);
+            drop(Arc::from_raw(ptr));
+        }
+    }
+
     fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO;
+
     fn get_object_attributes() -> WDF_OBJECT_ATTRIBUTES {
-        wdf_object_attributes_init_context_type(Self::get_type_info())
+        let mut attributes = wdf_object_attributes_init_context_type(Self::get_type_info());
+        attributes.EvtDestroyCallback = Some(Self::destroy);
+        attributes
     }
-}
 
-pub fn wdf_get_context_raw<T>(object: WDFOBJECT) -> *mut T
-where
-    T: WdfContext,
-{
-    let context_ptr;
-    unsafe {
-        context_ptr = call_unsafe_wdf_function_binding!(
-            WdfObjectGetTypedContextWorker,
-            object,
-            T::get_type_info()
-        );
+    fn get_raw(object: WDFOBJECT) -> *mut *const Self {
+        let context_ptr: *mut c_void;
+        unsafe {
+            context_ptr = call_unsafe_wdf_function_binding!(
+                WdfObjectGetTypedContextWorker,
+                object,
+                Self::get_type_info()
+            );
+        }
+        assert!(!context_ptr.is_null());
+        context_ptr as *mut *const Self
     }
-    assert!(!context_ptr.is_null());
-    context_ptr as *mut T
-}
 
-pub fn wdf_get_context<T>(object: WDFOBJECT) -> &'static mut T
-where
-    T: WdfContext,
-{
-    let context_ptr = wdf_get_context_raw::<T>(object);
-    unsafe { &mut *context_ptr }
-}
+    fn from_object(object: WDFOBJECT) -> Arc<Self> {
+        unsafe {
+            let ptr = *Self::get_raw(object);
+            Arc::increment_strong_count(ptr);
+            Arc::from_raw(ptr)
+        }
+    }
 
-pub fn wdf_init_context<T>(object: WDFOBJECT, context: T)
-where
-    T: WdfContext,
-{
-    let context_raw = wdf_get_context_raw::<T>(object);
-    unsafe {
-        context_raw.write(context);
+    fn init_object(object: WDFOBJECT, data: Arc<Self>) {
+        let ptr = Self::get_raw(object);
+        unsafe {
+            *ptr = Arc::into_raw(data);
+        }
     }
 }
 

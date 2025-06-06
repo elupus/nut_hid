@@ -32,10 +32,11 @@ struct DeviceContext<'a> {
     worker: Sender<(u32, WdfRequest)>,
 }
 
+// TODO this must be static
 const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEXT_TYPE_INFO {
     Size: core::mem::size_of::<WDF_OBJECT_CONTEXT_TYPE_INFO>() as ULONG,
     ContextName: c"DeviceContext".as_ptr(),
-    ContextSize: core::mem::size_of::<DeviceContext>(),
+    ContextSize: core::mem::size_of::<*const DeviceContext>(),
     UniqueType: std::ptr::null(),
     EvtDriverGetUniqueContextType: None,
 };
@@ -93,16 +94,6 @@ fn wdf_io_queue_config_init_default_queue(
     config
 }
 
-unsafe extern "C" fn evt_wdf_device_context_cleanup(object: WDFOBJECT) {
-    debug!("EvtWdfDeviceContextCleanup Entered!");
-    let _context = wdf_get_context::<DeviceContext>(object);
-}
-
-unsafe extern "C" fn evt_wdf_device_context_destroy(object: WDFOBJECT) {
-    debug!("EvtWdfDeviceContextDestroy Entered!");
-    let _context = wdf_get_context::<DeviceContext>(object);
-}
-
 fn wdf_device_create(
     mut device_init: *mut WDFDEVICE_INIT,
     attributes: &mut WDF_OBJECT_ATTRIBUTES,
@@ -139,8 +130,6 @@ extern "C" fn evt_driver_device_add(
     debug!("EvtDriverDeviceAdd Entered!");
 
     let mut attributes = DeviceContext::get_object_attributes();
-    attributes.EvtCleanupCallback = Some(evt_wdf_device_context_cleanup);
-    attributes.EvtDestroyCallback = Some(evt_wdf_device_context_destroy);
 
     unsafe {
         call_unsafe_wdf_function_binding!(WdfFdoInitSetFilter, device_init);
@@ -198,7 +187,8 @@ extern "C" fn evt_driver_device_add(
         hid_device_attr: hid_device_attr,
         worker: worker,
     };
-    wdf_init_context::<DeviceContext>(device as WDFOBJECT, context);
+
+    DeviceContext::init_object(device as WDFOBJECT, Arc::new(context));
 
     STATUS_SUCCESS
 }
@@ -267,7 +257,7 @@ extern "C" fn evt_io_device_control(
         device = call_unsafe_wdf_function_binding!(WdfIoQueueGetDevice, queue);
     }
 
-    let device_context = wdf_get_context::<DeviceContext>(device.cast());
+    let device_context = DeviceContext::from_object(device.cast());
     let mut request = WdfRequest(request);
 
     match io_control_code {
@@ -279,7 +269,7 @@ extern "C" fn evt_io_device_control(
                 }
             }
         }
-        _ => match evt_io_device_control_internal(&mut request, io_control_code, device_context) {
+        _ => match evt_io_device_control_internal(&mut request, io_control_code, &device_context) {
             Ok(()) => request.complete(STATUS_SUCCESS),
             Err(e) => request.complete(e),
         },
