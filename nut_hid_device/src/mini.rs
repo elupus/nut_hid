@@ -61,19 +61,15 @@ pub const HID_MINI_REPORT_DESCRIPTOR: &[u8] = &[
 ];
 
 pub struct MiniDevice {
-    device: DeviceData,
+    device: RwLock<DeviceData>,
 }
 
 impl Device for MiniDevice {
-    fn data(&self) -> &DeviceData {
+    fn data(&self) -> &RwLock<DeviceData> {
         &self.device
     }
 
-    fn data_mut(&mut self) -> &mut DeviceData {
-        &mut self.device
-    }
-
-    fn read(&mut self) -> Option<(u8, Vec<u8>)> {
+    fn read(&self) -> Option<(u8, Vec<u8>)> {
         None
     }
 }
@@ -90,5 +86,7 @@ pub fn new_mini_device() -> MiniDevice {
         product: NUT_HID_PRODUCT.into(),
         report_descriptor: HID_MINI_REPORT_DESCRIPTOR.into(),
     };
-    MiniDevice { device: data }
+    MiniDevice {
+        device: RwLock::new(data),
+    }
 }

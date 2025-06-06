@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::RwLock};
 pub mod constants;
 pub mod mini;
 pub mod nut;
@@ -18,7 +18,6 @@ pub struct DeviceData {
 }
 
 pub trait Device {
-    fn data_mut(&mut self) -> &mut DeviceData;
-    fn data(&self) -> &DeviceData;
-    fn read(&mut self) -> Option<(u8, Vec<u8>)>;
+    fn data(&self) -> &RwLock<DeviceData>;
+    fn read(&self) -> Option<(u8, Vec<u8>)>;
 }

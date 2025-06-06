@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::thread::{self};
 use std::{os::windows::ffi::OsStrExt, slice, string::String};
 
 use wdk_sys::{
@@ -18,14 +20,16 @@ mod wdf;
 use hid::*;
 use log::{debug, info, warn};
 use nut_hid_device::*;
+use std::sync::mpsc::{Sender, channel};
 use wdf::*;
 
 use std::ffi::OsStr;
 
 struct DeviceContext<'a> {
-    hid_device: Box<dyn Device + 'a>,
+    hid_device: Arc<dyn Device + 'a>,
     hid_device_desc: HID_DESCRIPTOR,
     hid_device_attr: HID_DEVICE_ATTRIBUTES,
+    worker: Sender<(u32, WdfRequest)>,
 }
 
 const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEXT_TYPE_INFO {
@@ -155,8 +159,8 @@ extern "C" fn evt_driver_device_add(
     };
 
     debug!("Build hid descriptors");
-    let hid_device = Box::new(nut_hid_device::nut::new_nut_device());
-    let hid_data = hid_device.data();
+    let hid_device = Arc::new(nut_hid_device::nut::new_nut_device());
+    let hid_data = hid_device.data().read().unwrap();
 
     let hid_report_desc = &hid_data.report_descriptor;
 
@@ -180,6 +184,9 @@ extern "C" fn evt_driver_device_add(
         VersionNumber: hid_data.version,
         ..HID_DEVICE_ATTRIBUTES::default()
     };
+    drop(hid_data);
+
+    let worker = create_device_worker(hid_device.clone());
 
     debug!(
         "Creating device context for: {:#?}, {:#?}",
@@ -189,6 +196,7 @@ extern "C" fn evt_driver_device_add(
         hid_device: hid_device,
         hid_device_desc: hid_device_desc,
         hid_device_attr: hid_device_attr,
+        worker: worker,
     };
     wdf_init_context::<DeviceContext>(device as WDFOBJECT, context);
 
@@ -262,9 +270,19 @@ extern "C" fn evt_io_device_control(
     let device_context = wdf_get_context::<DeviceContext>(device.cast());
     let mut request = WdfRequest(request);
 
-    match evt_io_device_control_internal(&mut request, io_control_code, device_context) {
-        Ok(()) => (),
-        Err(e) => request.complete(e),
+    match io_control_code {
+        IOCTL_HID_READ_REPORT | IOCTL_HID_WRITE_REPORT => {
+            match device_context.worker.send((io_control_code, request)) {
+                Ok(_) => (),
+                Err(e) => {
+                    warn!("Failed to send to worker: {:?}", e);
+                }
+            }
+        }
+        _ => match evt_io_device_control_internal(&mut request, io_control_code, device_context) {
+            Ok(()) => request.complete(STATUS_SUCCESS),
+            Err(e) => request.complete(e),
+        },
     }
 }
 
@@ -310,12 +328,11 @@ fn request_copy_from_string(request: &mut WdfRequest, data: &str) -> Result<(), 
     Ok(())
 }
 
-fn get_string(request: &mut WdfRequest, device_contex: &mut DeviceContext) -> Result<(), NTSTATUS> {
+fn get_string(request: &mut WdfRequest, data: &DeviceData) -> Result<(), NTSTATUS> {
     let (string_id, _) = get_string_id(&request.get_input_memory()?)?;
 
     debug!("get_string {string_id}");
 
-    let data = &device_contex.hid_device.data();
     let value;
     match string_id {
         HID_STRING_ID_IMANUFACTURER => {
@@ -333,15 +350,12 @@ fn get_string(request: &mut WdfRequest, device_contex: &mut DeviceContext) -> Re
     request_copy_from_string(request, value)
 }
 
-fn get_indexed_string(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn get_indexed_string(request: &mut WdfRequest, data: &DeviceData) -> Result<(), NTSTATUS> {
     let (string_id, _) = get_string_id(&request.get_input_memory()?)?;
 
     debug!("get_indexed_string {string_id}");
 
-    let strings = &device_contex.hid_device.data().strings;
+    let strings = &data.strings;
     let data = strings
         .get(&(string_id as u8))
         .ok_or(STATUS_INVALID_PARAMETER)?;
@@ -350,20 +364,17 @@ fn get_indexed_string(
 }
 
 // Read a pending report from device
-fn read_report(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
-    match device_contex.hid_device.read() {
+fn read_report(request: &mut WdfRequest, device: &dyn Device) -> Result<(), NTSTATUS> {
+    match device.read() {
         Some((report_id, report)) => {
             debug!("read_report -> {report_id}");
             copy_report_to_output(request, report_id, &report)?;
 
             /* for now just update the reports */
-            let reports = &mut device_contex.hid_device.data_mut().reports;
+            let reports = &mut device.data().write().unwrap().reports;
             reports.remove(&report_id);
             reports.insert(report_id, report);
-        
+
             Ok(())
         }
         None => {
@@ -373,10 +384,7 @@ fn read_report(
     }
 }
 
-fn write_report(
-    _request: &mut WdfRequest,
-    _device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn write_report(_request: &mut WdfRequest, _device: &dyn Device) -> Result<(), NTSTATUS> {
     debug!("write_report");
 
     Err(STATUS_NOT_IMPLEMENTED)
@@ -395,16 +403,13 @@ fn copy_report_to_output(
     Ok(())
 }
 
-fn get_report_internal(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn get_report_internal(request: &mut WdfRequest, device_data: &DeviceData) -> Result<(), NTSTATUS> {
     let input_memory = request.get_input_memory()?;
     let (report_id, _) = get_report(&input_memory)?;
 
     debug!("get_report_internal {report_id}");
 
-    let reports = &device_contex.hid_device.data().reports;
+    let reports = &device_data.reports;
     let data = reports.get(&report_id).ok_or(STATUS_INVALID_PARAMETER)?;
 
     copy_report_to_output(request, report_id, data)?;
@@ -412,32 +417,26 @@ fn get_report_internal(
     Ok(())
 }
 
-fn get_feature(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn get_feature(request: &mut WdfRequest, device_data: &DeviceData) -> Result<(), NTSTATUS> {
     debug!("get_feature");
-    get_report_internal(request, device_contex)
+    get_report_internal(request, device_data)
 }
 
-fn get_input_report(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn get_input_report(request: &mut WdfRequest, device_data: &DeviceData) -> Result<(), NTSTATUS> {
     debug!("get_feature");
-    get_report_internal(request, device_contex)
+    get_report_internal(request, device_data)
 }
 
 fn set_report_internal(
     request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
+    device_data: &mut DeviceData,
 ) -> Result<(), NTSTATUS> {
     let input_memory = request.get_input_memory()?;
     let (report_id, report) = get_report(&input_memory)?;
 
     debug!("set_report_internal {report_id}");
 
-    let reports = &mut device_contex.hid_device.data_mut().reports;
+    let reports = &mut device_data.reports;
     reports.remove(&report_id);
     reports.insert(report_id, report.to_vec());
 
@@ -446,71 +445,72 @@ fn set_report_internal(
 
 fn set_output_report(
     request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
+    device_data: &mut DeviceData,
 ) -> Result<(), NTSTATUS> {
     debug!("set_output_report");
-    set_report_internal(request, device_contex)
+    set_report_internal(request, device_data)
 }
 
-fn set_feature(
-    request: &mut WdfRequest,
-    device_contex: &mut DeviceContext,
-) -> Result<(), NTSTATUS> {
+fn set_feature(request: &mut WdfRequest, device_data: &mut DeviceData) -> Result<(), NTSTATUS> {
     debug!("set_feature");
-    set_report_internal(request, device_contex)
+    set_report_internal(request, device_data)
 }
 
 fn evt_io_device_control_internal(
     request: &mut WdfRequest,
     io_control_code: ULONG,
-    device_context: &mut DeviceContext,
+    device_context: &DeviceContext,
 ) -> Result<(), NTSTATUS> {
     debug!("io device control {io_control_code}");
 
     match io_control_code {
         IOCTL_HID_GET_DEVICE_DESCRIPTOR => {
             request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_desc))?;
-            request.complete(STATUS_SUCCESS);
         }
         IOCTL_HID_GET_DEVICE_ATTRIBUTES => {
             request_copy_from_slice(request, slice::from_ref(&device_context.hid_device_attr))?;
-            request.complete(STATUS_SUCCESS);
         }
+        _ => {
+            evt_io_device_control_device(request, io_control_code, &*device_context.hid_device)?;
+        }
+    }
+    Ok(())
+}
+
+fn evt_io_device_control_device(
+    request: &mut WdfRequest,
+    io_control_code: ULONG,
+    device: &dyn Device,
+) -> Result<(), NTSTATUS> {
+    debug!("io device control in worker {io_control_code}");
+
+    match io_control_code {
         IOCTL_HID_GET_REPORT_DESCRIPTOR => {
-            request_copy_from_slice(request, &device_context.hid_device.data().report_descriptor)?;
-            request.complete(STATUS_SUCCESS);
+            request_copy_from_slice(request, &device.data().read().unwrap().report_descriptor)?;
         }
         IOCTL_HID_GET_STRING => {
-            get_string(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            get_string(request, &device.data().read().unwrap())?;
         }
         IOCTL_HID_GET_INDEXED_STRING => {
-            get_indexed_string(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            get_indexed_string(request, &device.data().read().unwrap())?;
         }
         IOCTL_HID_READ_REPORT => {
-            read_report(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            read_report(request, device)?;
         }
         IOCTL_HID_WRITE_REPORT => {
-            write_report(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            write_report(request, device)?;
         }
         IOCTL_UMDF_HID_GET_FEATURE => {
-            get_feature(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            get_feature(request, &device.data().read().unwrap())?;
         }
         IOCTL_UMDF_HID_SET_FEATURE => {
-            set_feature(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            set_feature(request, &mut device.data().write().unwrap())?;
         }
         IOCTL_UMDF_HID_GET_INPUT_REPORT => {
-            get_input_report(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            get_input_report(request, &mut device.data().read().unwrap())?;
         }
         IOCTL_UMDF_HID_SET_OUTPUT_REPORT => {
-            set_output_report(request, device_context)?;
-            request.complete(STATUS_SUCCESS);
+            set_output_report(request, &mut device.data().write().unwrap())?;
         }
         _ => {
             warn!("Unsupported control");
@@ -551,4 +551,23 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
     }
 
     return Ok(queue);
+}
+
+fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> Sender<(u32, WdfRequest)> {
+    info!("Spawning worker thread");
+    let (sender, receiver) = channel();
+    thread::spawn(move || {
+        info!("Worker thread started");
+        loop {
+            let (io_control_code, mut request) = receiver.recv().unwrap();
+
+            info!("Worker thread got {}", io_control_code);
+            match evt_io_device_control_device(&mut request, io_control_code, &*device) {
+                Ok(()) => request.complete(STATUS_SUCCESS),
+                Err(e) => request.complete(e),
+            }
+        }
+    });
+
+    sender
 }

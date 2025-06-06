@@ -1,11 +1,10 @@
-use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
 use super::*;
 use constants::*;
-use log::{debug, info};
 use modular_bitfield::{bitfield, prelude::B1};
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
@@ -260,25 +259,30 @@ struct PresentStatus {
 }
 
 pub struct NutDevice {
-    device: DeviceData,
-    receiver: Receiver<(u8, Vec<u8>)>,
+    device: RwLock<DeviceData>,
+    pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
 }
 
 impl Device for NutDevice {
-    fn data(&self) -> &DeviceData {
+    fn data(&self) -> &RwLock<DeviceData> {
         &self.device
     }
 
-    fn data_mut(&mut self) -> &mut DeviceData {
-        &mut self.device
-    }
-
-    fn read(&mut self) -> Option<(u8, Vec<u8>)> {
+    fn read(&self) -> Option<(u8, Vec<u8>)> {
         /* get all pending */
-        match self.receiver.try_recv() {
-            Ok(report) => Some(report),
-            Err(_) => None,
+        let mut pending = self.pending.lock().unwrap();
+        if let Some(report) = pending.pop_front() {
+            thread::sleep(Duration::from_secs(2));
+            return Some(report);
         }
+
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![80]));
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![70]));
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![60]));
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![50]));
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![60]));
+        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![70]));
+        pending.pop_front()
     }
 }
 
@@ -328,37 +332,10 @@ pub fn new_nut_device() -> NutDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    info!("Spawning worker thread");
-    let (sender, receiver): (SyncSender<(u8, Vec<u8>)>, _) = sync_channel(10);
-    thread::spawn(move || {
-        info!("Worker thread started");
-        loop {
-            debug!("Loop");
-            sender
-                .send((REPORT_ID_REMAININGCAPACITY, vec![80]))
-                .unwrap();
-            thread::sleep(Duration::from_secs(3));
-            sender
-                .send((REPORT_ID_REMAININGCAPACITY, vec![50]))
-                .unwrap();
-            thread::sleep(Duration::from_secs(3));
-            sender
-                .send((REPORT_ID_REMAININGCAPACITY, vec![30]))
-                .unwrap();
-            thread::sleep(Duration::from_secs(3));
-            sender
-                .send((REPORT_ID_REMAININGCAPACITY, vec![60]))
-                .unwrap();
-            thread::sleep(Duration::from_secs(3));
-            sender
-                .send((REPORT_ID_REMAININGCAPACITY, vec![90]))
-                .unwrap();
-            thread::sleep(Duration::from_secs(3));
-        }
-        //drop(sender);
-    });
-
-    NutDevice { device, receiver }
+    NutDevice {
+        device: RwLock::new(device),
+        pending: Mutex::new(VecDeque::new()),
+    }
 }
 
 #[cfg(test)]

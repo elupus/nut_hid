@@ -117,10 +117,13 @@ impl WdfRequest {
         }
     }
 
-    pub fn complete(&mut self, status: NTSTATUS) {
+    pub fn complete(self, status: NTSTATUS) {
         unsafe { call_unsafe_wdf_function_binding!(WdfRequestComplete, self.0, status) }
     }
 }
+
+unsafe impl Send for WdfRequest {}
+unsafe impl Sync for WdfRequest {}
 
 pub struct WdfMemory(pub WDFMEMORY);
 
