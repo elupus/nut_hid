@@ -260,6 +260,7 @@ struct PresentStatus {
 
 pub struct NutDevice {
     device: RwLock<DeviceData>,
+    device_config: DeviceConfig,
     pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
 }
 
@@ -286,7 +287,7 @@ impl Device for NutDevice {
     }
 }
 
-pub fn new_nut_device() -> NutDevice {
+pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
     let mut device = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
@@ -334,6 +335,7 @@ pub fn new_nut_device() -> NutDevice {
 
     NutDevice {
         device: RwLock::new(device),
+        device_config: device_config,
         pending: Mutex::new(VecDeque::new()),
     }
 }

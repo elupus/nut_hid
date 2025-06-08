@@ -17,6 +17,11 @@ pub struct DeviceData {
     pub report_descriptor: Vec<u8>,
 }
 
+#[derive(Default, Debug)]
+pub struct DeviceConfig {
+    pub host: String,
+}
+
 pub trait Device {
     fn data(&self) -> &RwLock<DeviceData>;
     fn read(&self) -> Option<(u8, Vec<u8>)>;

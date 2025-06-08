@@ -12,6 +12,7 @@ use wdk_sys::{
     WDFDEVICE_INIT, WDFDRIVER, WDFOBJECT, WDFQUEUE, WDFREQUEST, call_unsafe_wdf_function_binding,
 };
 
+mod backports;
 mod constants;
 mod hid;
 mod logger;
@@ -123,6 +124,12 @@ fn wdf_device_create(
     Ok(device)
 }
 
+fn get_device_config(device: WDFDEVICE) -> Result<DeviceConfig, NTSTATUS> {
+    let host = wdf_device_query_property_string(device, &constants::DEVPROP_NUTHID_KEY_HOST)?;
+
+    Ok(DeviceConfig { host })
+}
+
 extern "C" fn evt_driver_device_add(
     _driver: WDFDRIVER,
     device_init: *mut WDFDEVICE_INIT,
@@ -141,6 +148,13 @@ extern "C" fn evt_driver_device_add(
         Ok(device) => device,
     };
 
+    debug!("Getting device config");
+    let device_config = match get_device_config(device) {
+        Err(status) => return status,
+        Ok(device_config) => device_config,
+    };
+    info!("Got device config {:?}", device_config);
+
     debug!("Creating default queue");
     let queue = match create_default_queue(device) {
         Err(status) => return status,
@@ -148,7 +162,7 @@ extern "C" fn evt_driver_device_add(
     };
 
     debug!("Build hid descriptors");
-    let hid_device = Arc::new(nut_hid_device::nut::new_nut_device());
+    let hid_device = Arc::new(nut_hid_device::nut::new_nut_device(device_config));
     let hid_data = hid_device.data().read().unwrap();
 
     let hid_report_desc = &hid_data.report_descriptor;

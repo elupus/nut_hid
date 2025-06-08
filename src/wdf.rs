@@ -2,13 +2,19 @@ use std::slice;
 use std::sync::Arc;
 use std::{ffi::c_void, ptr};
 
-use log::debug;
+use log::{debug, warn};
 use wdk_sys::{
     _WDF_EXECUTION_LEVEL::WdfExecutionLevelInheritFromParent,
     _WDF_SYNCHRONIZATION_SCOPE::WdfSynchronizationScopeInheritFromParent, NT_SUCCESS, NTSTATUS,
-    ULONG, WDF_OBJECT_ATTRIBUTES, WDF_OBJECT_CONTEXT_TYPE_INFO, WDFMEMORY, WDFMEMORY__, WDFOBJECT,
-    WDFREQUEST, WDFREQUEST__, call_unsafe_wdf_function_binding,
+    ULONG, WDF_OBJECT_ATTRIBUTES, WDF_OBJECT_CONTEXT_TYPE_INFO, WDFDEVICE, WDFMEMORY, WDFMEMORY__,
+    WDFOBJECT, WDFREQUEST, call_unsafe_wdf_function_binding,
 };
+use wdk_sys::{
+    DEVPROP_TYPE_STRING, DEVPROPKEY, DEVPROPTYPE, STATUS_BAD_DATA, STATUS_BUFFER_TOO_SMALL,
+    STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA,
+};
+
+use crate::backports::from_utf16le_lossy;
 
 pub fn wdf_object_attributes_init() -> WDF_OBJECT_ATTRIBUTES {
     WDF_OBJECT_ATTRIBUTES {
@@ -172,4 +178,87 @@ impl WdfMemory {
 
         return Ok(len);
     }
+}
+
+pub fn wdf_device_query_property_ex(
+    device: WDFDEVICE,
+    device_property_data: &mut WDF_DEVICE_PROPERTY_DATA,
+) -> Result<(Vec<u8>, DEVPROPTYPE), NTSTATUS> {
+    let mut size: ULONG = 0;
+    let mut property_type: DEVPROPTYPE = 0;
+    unsafe {
+        let status = call_unsafe_wdf_function_binding!(
+            WdfDeviceQueryPropertyEx,
+            device,
+            device_property_data,
+            0,
+            ptr::null_mut(),
+            &mut size,
+            &mut property_type,
+        );
+        if status != STATUS_BUFFER_TOO_SMALL {
+            warn!(
+                "Failed to get property {:?} -> {}",
+                device_property_data, status
+            );
+            return Err(status);
+        }
+    }
+
+    let mut data = Vec::<u8>::with_capacity(size as usize);
+    let uninit = data.spare_capacity_mut();
+
+    unsafe {
+        let status = call_unsafe_wdf_function_binding!(
+            WdfDeviceQueryPropertyEx,
+            device,
+            device_property_data,
+            size,
+            uninit.as_mut_ptr() as *mut c_void,
+            &mut size,
+            &mut property_type,
+        );
+        if status != STATUS_SUCCESS {
+            warn!(
+                "Failed to get property {:?} -> {}",
+                device_property_data, status
+            );
+            return Err(status);
+        }
+        data.set_len(size as usize);
+    }
+
+    Ok((data, property_type))
+}
+
+pub fn wdf_device_query_property_string(
+    device: WDFDEVICE,
+    device_property_key: &DEVPROPKEY,
+) -> Result<String, NTSTATUS> {
+    let mut device_property_data = WDF_DEVICE_PROPERTY_DATA {
+        Size: size_of::<WDF_DEVICE_PROPERTY_DATA>() as ULONG,
+        PropertyKey: device_property_key,
+        Lcid: 0, /*LOCALE_NEUTRAL*/
+        Flags: 0,
+        ..Default::default()
+    };
+
+    let (data, property_type) = wdf_device_query_property_ex(device, &mut device_property_data)?;
+    if property_type != DEVPROP_TYPE_STRING {
+        warn!("Unexpected device property type: {property_type}");
+        return Err(STATUS_BAD_DATA);
+    }
+
+    let result = from_utf16le_lossy(&data);
+
+    match result.split_once(char::from(0)) {
+        Some((result, _)) => {
+            return Ok(result.to_string());
+        }
+        None => {
+            warn!("Unexpected device property data: {result}");
+            return Err(STATUS_BAD_DATA);
+        }
+    }
+
 }
