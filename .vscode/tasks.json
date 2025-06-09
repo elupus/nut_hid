@@ -16,7 +16,7 @@
             "type": "shell",
             "command": "scripts\\deploy.bat",
             "args": [
-                "target\\debug\\nut_hid_package",
+                "target\\debug",
                 "${config:nut-hid.target_host}",
                 "${config:nut-hid.target_path}"
             ],

@@ -1,0 +1,8 @@
+[package]
+name = "nut_hid_cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+windows = { version = "0.61.1", features = ["Win32_Devices_Enumeration_Pnp", "Win32_Devices_Properties", "Win32_Security", "Win32_System_Threading"] }
+windows-strings = "0.4.2"
