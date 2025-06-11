@@ -1,7 +1,10 @@
+use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, channel};
 use std::{ffi::c_void, thread::sleep, time::Duration};
 
+use widestring;
 use windows::Win32::Devices::Enumeration::Pnp::SwDeviceClose;
 use windows::Win32::Foundation::S_OK;
 use windows::{
@@ -56,7 +59,9 @@ extern "system" fn create_callback(
     println!("Device created");
 
     let sender = context as *const Sender<CallbackData>;
-    unsafe { Arc::increment_strong_count(sender); }
+    unsafe {
+        Arc::increment_strong_count(sender);
+    }
     let sender = unsafe { Arc::from_raw(context as *const Sender<CallbackData>) };
 
     if result == S_OK {
@@ -67,18 +72,48 @@ extern "system" fn create_callback(
     }
 }
 
+struct PropertiesStore {
+    strings: Vec<Box<widestring::U16CStr>>,
+    properties: Vec<DEVPROPERTY>,
+}
+
+impl PropertiesStore {
+    fn new() -> PropertiesStore {
+        PropertiesStore {
+            strings: Vec::new(),
+            properties: Vec::new(),
+        }
+    }
+
+    fn add_string(&mut self, key: DEVPROPCOMPKEY, value: &str) {
+        let value = widestring::U16CString::from_str(value)
+            .unwrap()
+            .into_boxed_ucstr();
+        
+        let value_ptr = value.as_ptr();
+        let value_len = (value.len() + 1) * size_of::<u16>();
+        self.strings.push(value);
+
+        let property = DEVPROPERTY {
+            Type: DEVPROP_TYPE_STRING,
+            CompKey: key,
+            BufferSize: value_len as u32,
+            Buffer: value_ptr as *mut c_void,
+        };
+        self.properties.push(property);
+    }
+
+    fn get<'a>(&'a self) -> &'a Vec<DEVPROPERTY> {
+        &self.properties
+    }
+}
+
 fn main() {
     println!("Creating device");
 
-    let hostname: PCWSTR = w!("nuthost");
-    let hostname_len = unsafe { hostname.len() + 1 } * size_of::<u16>();
+    let mut properties = PropertiesStore::new();
 
-    let property_hostname = DEVPROPERTY {
-        Type: DEVPROP_TYPE_STRING,
-        CompKey: DEVPROP_NUTHID_COMPKEY_HOST,
-        BufferSize: hostname_len as u32,
-        Buffer: hostname.as_ptr() as *mut c_void,
-    };
+    properties.add_string(DEVPROP_NUTHID_COMPKEY_HOST, "nuthost2");
 
     let info = SW_DEVICE_CREATE_INFO {
         cbSize: size_of::<SW_DEVICE_CREATE_INFO>() as u32,
@@ -102,7 +137,7 @@ fn main() {
             ENUMERATOR_NAME,
             PARENT_DEVICE_INSTANCE,
             &info,
-            Some(&[property_hostname]),
+            Some(properties.get()),
             Some(create_callback),
             Some(sender as *const c_void),
         )

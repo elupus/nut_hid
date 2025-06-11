@@ -388,6 +388,7 @@ dependencies = [
 name = "nut_hid_cli"
 version = "0.1.0"
 dependencies = [
+ "widestring",
  "windows 0.61.1",
  "windows-strings 0.4.2",
 ]
@@ -815,6 +816,12 @@ dependencies = [
  "wdk-build",
  "wdk-macros",
 ]
+
+[[package]]
+name = "widestring"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd7cf3379ca1aac9eea11fba24fd7e315d621f8dfe35c8d7d2be8b793726e07d"
 
 [[package]]
 name = "winapi"
