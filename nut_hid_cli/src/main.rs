@@ -1,10 +1,10 @@
-use std::ops::Deref;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, channel};
 use std::{ffi::c_void, thread::sleep, time::Duration};
 
-use widestring;
+mod properties;
+use properties::*;
+
 use windows::Win32::Devices::Enumeration::Pnp::SwDeviceClose;
 use windows::Win32::Foundation::S_OK;
 use windows::{
@@ -14,9 +14,7 @@ use windows::{
                 HSWDEVICE, SW_DEVICE_CREATE_INFO, SWDeviceCapabilitiesDriverRequired,
                 SWDeviceCapabilitiesRemovable, SWDeviceCapabilitiesSilentInstall, SwDeviceCreate,
             },
-            Properties::{DEVPROP_STORE_SYSTEM, DEVPROP_TYPE_STRING, DEVPROPCOMPKEY, DEVPROPERTY},
         },
-        Foundation::DEVPROPKEY,
     },
     core::{GUID, HRESULT},
 };
@@ -31,16 +29,7 @@ pub const DEVPROP_NUTHID_GUID: GUID = GUID {
     data4: [0x8f, 0x81, 0xe7, 0x05, 0xf3, 0xac, 0x17, 0xa1],
 };
 
-pub const DEVPROP_NUTHID_KEY_HOST: DEVPROPKEY = DEVPROPKEY {
-    fmtid: DEVPROP_NUTHID_GUID,
-    pid: 2,
-};
-
-pub const DEVPROP_NUTHID_COMPKEY_HOST: DEVPROPCOMPKEY = DEVPROPCOMPKEY {
-    Store: DEVPROP_STORE_SYSTEM,
-    Key: DEVPROP_NUTHID_KEY_HOST,
-    LocaleName: PCWSTR::null(),
-};
+pub const DEVPROP_NUTHID_KEY_HOST: u32 = 2;
 
 const ENUMERATOR_NAME: PCWSTR = w!("NutHidEnumerator");
 const HARDWARE_IDS: PCWSTR = w!("root\\NutHidDevice\0");
@@ -72,48 +61,12 @@ extern "system" fn create_callback(
     }
 }
 
-struct PropertiesStore {
-    strings: Vec<Box<widestring::U16CStr>>,
-    properties: Vec<DEVPROPERTY>,
-}
-
-impl PropertiesStore {
-    fn new() -> PropertiesStore {
-        PropertiesStore {
-            strings: Vec::new(),
-            properties: Vec::new(),
-        }
-    }
-
-    fn add_string(&mut self, key: DEVPROPCOMPKEY, value: &str) {
-        let value = widestring::U16CString::from_str(value)
-            .unwrap()
-            .into_boxed_ucstr();
-        
-        let value_ptr = value.as_ptr();
-        let value_len = (value.len() + 1) * size_of::<u16>();
-        self.strings.push(value);
-
-        let property = DEVPROPERTY {
-            Type: DEVPROP_TYPE_STRING,
-            CompKey: key,
-            BufferSize: value_len as u32,
-            Buffer: value_ptr as *mut c_void,
-        };
-        self.properties.push(property);
-    }
-
-    fn get<'a>(&'a self) -> &'a Vec<DEVPROPERTY> {
-        &self.properties
-    }
-}
-
 fn main() {
     println!("Creating device");
 
     let mut properties = PropertiesStore::new();
 
-    properties.add_string(DEVPROP_NUTHID_COMPKEY_HOST, "nuthost2");
+    properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_HOST, "nuthost2");
 
     let info = SW_DEVICE_CREATE_INFO {
         cbSize: size_of::<SW_DEVICE_CREATE_INFO>() as u32,
