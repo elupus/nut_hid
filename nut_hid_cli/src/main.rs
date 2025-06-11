@@ -55,6 +55,8 @@ extern "system" fn create_callback(
 ) {
     println!("Device created");
 
+    let sender = context as *const Sender<CallbackData>;
+    unsafe { Arc::increment_strong_count(sender); }
     let sender = unsafe { Arc::from_raw(context as *const Sender<CallbackData>) };
 
     if result == S_OK {
@@ -92,6 +94,9 @@ fn main() {
 
     let (sender, receiver): (Sender<CallbackData>, _) = channel();
 
+    /* convert to raw ptr that need to live until we close the device */
+    let sender = Arc::into_raw(sender.into());
+
     let device = unsafe {
         SwDeviceCreate(
             ENUMERATOR_NAME,
@@ -99,7 +104,7 @@ fn main() {
             &info,
             Some(&[property_hostname]),
             Some(create_callback),
-            Some(Arc::into_raw(sender.into()) as *const c_void),
+            Some(sender as *const c_void),
         )
         .unwrap()
     };
@@ -117,4 +122,7 @@ fn main() {
     unsafe {
         SwDeviceClose(device);
     }
+
+    /* recover sender */
+    drop(unsafe { Arc::from_raw(sender) })
 }
