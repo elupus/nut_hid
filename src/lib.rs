@@ -125,9 +125,19 @@ fn wdf_device_create(
 }
 
 fn get_device_config(device: WDFDEVICE) -> Result<DeviceConfig, NTSTATUS> {
-    let host = wdf_device_query_property_string(device, &constants::DEVPROP_NUTHID_KEY_HOST)?;
+    let host = wdf_device_query_property_string(
+        device,
+        constants::DEVPROP_NUTHID_GUID,
+        constants::DEVPROP_NUTHID_KEY_HOST,
+    )?;
 
-    Ok(DeviceConfig { host })
+    let port = wdf_device_query_property_u32(
+        device,
+        constants::DEVPROP_NUTHID_GUID,
+        constants::DEVPROP_NUTHID_KEY_PORT,
+    )?;
+
+    Ok(DeviceConfig { host, port })
 }
 
 extern "C" fn evt_driver_device_add(

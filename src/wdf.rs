@@ -10,8 +10,7 @@ use wdk_sys::{
     WDFOBJECT, WDFREQUEST, call_unsafe_wdf_function_binding,
 };
 use wdk_sys::{
-    DEVPROP_TYPE_STRING, DEVPROPKEY, DEVPROPTYPE, STATUS_BAD_DATA, STATUS_BUFFER_TOO_SMALL,
-    STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA,
+    DEVPROPKEY, DEVPROPTYPE, DEVPROP_TYPE_STRING, DEVPROP_TYPE_UINT32, GUID, STATUS_BAD_DATA, STATUS_BUFFER_TOO_SMALL, STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA
 };
 
 use crate::backports::from_utf16le_lossy;
@@ -231,19 +230,29 @@ pub fn wdf_device_query_property_ex(
     Ok((data, property_type))
 }
 
-pub fn wdf_device_query_property_string(
-    device: WDFDEVICE,
-    device_property_key: &DEVPROPKEY,
-) -> Result<String, NTSTATUS> {
+fn wdf_device_query_property_data(device: *mut wdk_sys::WDFDEVICE__, fmtid: wdk_sys::GUID, pid: u32) -> Result<(Vec<u8>, u32), NTSTATUS> {
+    let device_property_key = DEVPROPKEY {
+        fmtid,
+        pid,
+    };
     let mut device_property_data = WDF_DEVICE_PROPERTY_DATA {
         Size: size_of::<WDF_DEVICE_PROPERTY_DATA>() as ULONG,
-        PropertyKey: device_property_key,
+        PropertyKey: &device_property_key,
         Lcid: 0, /*LOCALE_NEUTRAL*/
         Flags: 0,
         ..Default::default()
     };
-
     let (data, property_type) = wdf_device_query_property_ex(device, &mut device_property_data)?;
+    Ok((data, property_type))
+}
+
+pub fn wdf_device_query_property_string(
+    device: WDFDEVICE,
+    fmtid: GUID,
+    pid: u32
+) -> Result<String, NTSTATUS> {
+
+    let (data, property_type) = wdf_device_query_property_data(device, fmtid, pid)?;
     if property_type != DEVPROP_TYPE_STRING {
         warn!("Unexpected device property type: {property_type}");
         return Err(STATUS_BAD_DATA);
@@ -260,5 +269,22 @@ pub fn wdf_device_query_property_string(
             return Err(STATUS_BAD_DATA);
         }
     }
-
 }
+
+
+pub fn wdf_device_query_property_u32(
+    device: WDFDEVICE,
+    fmtid: GUID,
+    pid: u32
+) -> Result<u32, NTSTATUS> {
+
+    let (data, property_type) = wdf_device_query_property_data(device, fmtid, pid)?;
+    if property_type != DEVPROP_TYPE_UINT32 {
+        warn!("Unexpected device property type: {property_type}");
+        return Err(STATUS_BAD_DATA);
+    }
+
+    let value: [u8; 4] = data.try_into().map_err(|_|  STATUS_BAD_DATA)?;
+    Ok(u32::from_ne_bytes(value))
+}
+

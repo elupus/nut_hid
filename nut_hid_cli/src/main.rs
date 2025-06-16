@@ -3,6 +3,8 @@ use std::sync::mpsc::{Sender, channel};
 use std::{ffi::c_void, thread::sleep, time::Duration};
 
 mod properties;
+mod constants;
+use constants::*;
 use properties::*;
 
 use windows::Win32::Devices::Enumeration::Pnp::SwDeviceClose;
@@ -16,26 +18,10 @@ use windows::{
             },
         },
     },
-    core::{GUID, HRESULT},
+    core::{HRESULT},
 };
 
 use windows_strings::{PCWSTR, w};
-
-/* 53c0d411-cfb1-4d29-8f81-e705f3ac17a1 */
-pub const DEVPROP_NUTHID_GUID: GUID = GUID {
-    data1: 0x53c0d411,
-    data2: 0xcfb1,
-    data3: 0x4d29,
-    data4: [0x8f, 0x81, 0xe7, 0x05, 0xf3, 0xac, 0x17, 0xa1],
-};
-
-pub const DEVPROP_NUTHID_KEY_HOST: u32 = 2;
-
-const ENUMERATOR_NAME: PCWSTR = w!("NutHidEnumerator");
-const HARDWARE_IDS: PCWSTR = w!("root\\NutHidDevice\0");
-const INSTANCE_ID: PCWSTR = w!("NutHidInstance");
-const DEVICE_DESCRIPTION: PCWSTR = w!("NUT Hid Device");
-const PARENT_DEVICE_INSTANCE: PCWSTR = w!("HTREE\\ROOT\\0");
 
 type CallbackData = Result<String, HRESULT>;
 
@@ -67,6 +53,10 @@ fn main() {
     let mut properties = PropertiesStore::new();
 
     properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_HOST, "nuthost2");
+    properties.add_u32(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_PORT, 3493);
+
+
+    println!("With properties {:?}", properties);
 
     let info = SW_DEVICE_CREATE_INFO {
         cbSize: size_of::<SW_DEVICE_CREATE_INFO>() as u32,

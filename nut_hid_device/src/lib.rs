@@ -20,6 +20,7 @@ pub struct DeviceData {
 #[derive(Default, Debug)]
 pub struct DeviceConfig {
     pub host: String,
+    pub port: u32,
 }
 
 pub trait Device {
