@@ -41,7 +41,10 @@ pub trait WdfContext {
         debug!("Destroy context!");
         unsafe {
             let ptr = *Self::get_raw(object);
-            drop(Arc::from_raw(ptr));
+            if !ptr.is_null()
+            {
+                drop(Arc::from_raw(ptr));
+            }
         }
     }
 
