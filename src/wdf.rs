@@ -40,11 +40,8 @@ pub trait WdfContext {
     unsafe extern "C" fn destroy(object: WDFOBJECT) {
         debug!("Destroy context!");
         unsafe {
-            let ptr = *Self::get_raw(object);
-            if !ptr.is_null()
-            {
-                drop(Arc::from_raw(ptr));
-            }
+            let ptr = Self::get_raw(object);
+            drop(ptr.read());
         }
     }
 
@@ -56,7 +53,7 @@ pub trait WdfContext {
         attributes
     }
 
-    fn get_raw(object: WDFOBJECT) -> *mut *const Self {
+    fn get_raw(object: WDFOBJECT) -> *mut Option<Arc<Self>> {
         let context_ptr: *mut c_void;
         unsafe {
             context_ptr = call_unsafe_wdf_function_binding!(
@@ -66,21 +63,21 @@ pub trait WdfContext {
             );
         }
         assert!(!context_ptr.is_null());
-        context_ptr as *mut *const Self
+        context_ptr as *mut Option<Arc<Self>>
     }
 
     fn from_object(object: WDFOBJECT) -> Arc<Self> {
         unsafe {
-            let ptr = *Self::get_raw(object);
-            Arc::increment_strong_count(ptr);
-            Arc::from_raw(ptr)
+            let ptr = Self::get_raw(object);
+            let val = (*ptr).as_ref();
+            val.expect("Object was never initialized").clone()
         }
     }
 
-    fn init_object(object: WDFOBJECT, data: Arc<Self>) {
+    fn init(object: WDFOBJECT, data: Option<Arc<Self>>) {
         let ptr = Self::get_raw(object);
         unsafe {
-            *ptr = Arc::into_raw(data);
+            ptr.write(data);
         }
     }
 }

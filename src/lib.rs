@@ -37,7 +37,7 @@ struct DeviceContext<'a> {
 const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEXT_TYPE_INFO {
     Size: core::mem::size_of::<WDF_OBJECT_CONTEXT_TYPE_INFO>() as ULONG,
     ContextName: c"DeviceContext".as_ptr(),
-    ContextSize: core::mem::size_of::<*const DeviceContext>(),
+    ContextSize: core::mem::size_of::<Option<Arc<DeviceContext>>>(),
     UniqueType: std::ptr::null(),
     EvtDriverGetUniqueContextType: None,
 };
@@ -158,6 +158,8 @@ extern "C" fn evt_driver_device_add(
         Ok(device) => device,
     };
 
+    DeviceContext::init(device as WDFOBJECT, None);
+
     debug!("Getting device config");
     let device_config = match get_device_config(device) {
         Err(status) => return status,
@@ -166,7 +168,7 @@ extern "C" fn evt_driver_device_add(
     info!("Got device config {:?}", device_config);
 
     debug!("Creating default queue");
-    let queue = match create_default_queue(device) {
+    let _queue = match create_default_queue(device) {
         Err(status) => return status,
         Ok(queue) => queue,
     };
@@ -212,7 +214,7 @@ extern "C" fn evt_driver_device_add(
         worker: worker,
     };
 
-    DeviceContext::init_object(device as WDFOBJECT, Arc::new(context));
+    DeviceContext::init(device as WDFOBJECT, Some(Arc::new(context)));
 
     STATUS_SUCCESS
 }
