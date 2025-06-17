@@ -1,3 +1,4 @@
+use std::ffi::CStr;
 use std::slice;
 use std::sync::Arc;
 use std::{ffi::c_void, ptr};
@@ -10,7 +11,8 @@ use wdk_sys::{
     WDFOBJECT, WDFREQUEST, call_unsafe_wdf_function_binding,
 };
 use wdk_sys::{
-    DEVPROPKEY, DEVPROPTYPE, DEVPROP_TYPE_STRING, DEVPROP_TYPE_UINT32, GUID, STATUS_BAD_DATA, STATUS_BUFFER_TOO_SMALL, STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA
+    DEVPROP_TYPE_STRING, DEVPROP_TYPE_UINT32, DEVPROPKEY, DEVPROPTYPE, GUID, STATUS_BAD_DATA,
+    STATUS_BUFFER_TOO_SMALL, STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA,
 };
 
 use crate::backports::from_utf16le_lossy;
@@ -36,7 +38,21 @@ pub fn wdf_object_attributes_init_context_type(
     attributes
 }
 
+pub const fn wdf_object_context_type_info_get<T: WdfContext>(
+    name: &'static CStr,
+) -> WDF_OBJECT_CONTEXT_TYPE_INFO {
+    WDF_OBJECT_CONTEXT_TYPE_INFO {
+        Size: core::mem::size_of::<WDF_OBJECT_CONTEXT_TYPE_INFO>() as ULONG,
+        ContextName: name.as_ptr(),
+        ContextSize: core::mem::size_of::<Option<T::Type>>(),
+        UniqueType: std::ptr::null(),
+        EvtDriverGetUniqueContextType: None,
+    }
+}
+
 pub trait WdfContext {
+    type Type: Clone;
+
     unsafe extern "C" fn destroy(object: WDFOBJECT) {
         debug!("Destroy context!");
         unsafe {
@@ -53,7 +69,7 @@ pub trait WdfContext {
         attributes
     }
 
-    fn get_raw(object: WDFOBJECT) -> *mut Option<Arc<Self>> {
+    fn get_raw(object: WDFOBJECT) -> *mut Option<Self::Type> {
         let context_ptr: *mut c_void;
         unsafe {
             context_ptr = call_unsafe_wdf_function_binding!(
@@ -63,10 +79,10 @@ pub trait WdfContext {
             );
         }
         assert!(!context_ptr.is_null());
-        context_ptr as *mut Option<Arc<Self>>
+        context_ptr as *mut Option<Self::Type>
     }
 
-    fn from_object(object: WDFOBJECT) -> Arc<Self> {
+    fn from_object(object: WDFOBJECT) -> Self::Type {
         unsafe {
             let ptr = Self::get_raw(object);
             let val = (*ptr).as_ref();
@@ -74,7 +90,7 @@ pub trait WdfContext {
         }
     }
 
-    fn init(object: WDFOBJECT, data: Option<Arc<Self>>) {
+    fn init(object: WDFOBJECT, data: Option<Self::Type>) {
         let ptr = Self::get_raw(object);
         unsafe {
             ptr.write(data);
@@ -230,11 +246,12 @@ pub fn wdf_device_query_property_ex(
     Ok((data, property_type))
 }
 
-fn wdf_device_query_property_data(device: *mut wdk_sys::WDFDEVICE__, fmtid: wdk_sys::GUID, pid: u32) -> Result<(Vec<u8>, u32), NTSTATUS> {
-    let device_property_key = DEVPROPKEY {
-        fmtid,
-        pid,
-    };
+fn wdf_device_query_property_data(
+    device: *mut wdk_sys::WDFDEVICE__,
+    fmtid: wdk_sys::GUID,
+    pid: u32,
+) -> Result<(Vec<u8>, u32), NTSTATUS> {
+    let device_property_key = DEVPROPKEY { fmtid, pid };
     let mut device_property_data = WDF_DEVICE_PROPERTY_DATA {
         Size: size_of::<WDF_DEVICE_PROPERTY_DATA>() as ULONG,
         PropertyKey: &device_property_key,
@@ -249,9 +266,8 @@ fn wdf_device_query_property_data(device: *mut wdk_sys::WDFDEVICE__, fmtid: wdk_
 pub fn wdf_device_query_property_string(
     device: WDFDEVICE,
     fmtid: GUID,
-    pid: u32
+    pid: u32,
 ) -> Result<String, NTSTATUS> {
-
     let (data, property_type) = wdf_device_query_property_data(device, fmtid, pid)?;
     if property_type != DEVPROP_TYPE_STRING {
         warn!("Unexpected device property type: {property_type}");
@@ -271,20 +287,17 @@ pub fn wdf_device_query_property_string(
     }
 }
 
-
 pub fn wdf_device_query_property_u32(
     device: WDFDEVICE,
     fmtid: GUID,
-    pid: u32
+    pid: u32,
 ) -> Result<u32, NTSTATUS> {
-
     let (data, property_type) = wdf_device_query_property_data(device, fmtid, pid)?;
     if property_type != DEVPROP_TYPE_UINT32 {
         warn!("Unexpected device property type: {property_type}");
         return Err(STATUS_BAD_DATA);
     }
 
-    let value: [u8; 4] = data.try_into().map_err(|_|  STATUS_BAD_DATA)?;
+    let value: [u8; 4] = data.try_into().map_err(|_| STATUS_BAD_DATA)?;
     Ok(u32::from_ne_bytes(value))
 }
-

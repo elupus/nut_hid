@@ -34,15 +34,12 @@ struct DeviceContext<'a> {
 }
 
 // TODO this must be static
-const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO = WDF_OBJECT_CONTEXT_TYPE_INFO {
-    Size: core::mem::size_of::<WDF_OBJECT_CONTEXT_TYPE_INFO>() as ULONG,
-    ContextName: c"DeviceContext".as_ptr(),
-    ContextSize: core::mem::size_of::<Option<Arc<DeviceContext>>>(),
-    UniqueType: std::ptr::null(),
-    EvtDriverGetUniqueContextType: None,
-};
+const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO =
+    wdf_object_context_type_info_get::<DeviceContext>(c"DeviceContext");
 
 impl WdfContext for DeviceContext<'_> {
+    type Type = Arc<Self>;
+
     fn get_type_info() -> &'static WDF_OBJECT_CONTEXT_TYPE_INFO {
         &DEVICE_CONTEXT_TYPE_INFO
     }
