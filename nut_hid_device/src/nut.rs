@@ -4,8 +4,9 @@ use std::thread;
 use std::time::Duration;
 
 use super::*;
+use binary_serde::recursive_array::RecursiveArray;
+use binary_serde::{BinarySerde, BitfieldBitOrder, Endianness, binary_serde_bitfield};
 use constants::*;
-use modular_bitfield::{bitfield, prelude::B1};
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
 pub const STRING_ID_PRODUCT: u8 = 0x02;
@@ -13,10 +14,7 @@ pub const STRING_ID_SERIAL: u8 = 0x03;
 pub const STRING_ID_DEVICECHEMISTRY: u8 = 0x04;
 pub const STRING_ID_OEMVENDOR: u8 = 0x05;
 
-pub const REPORT_ID_IPRODUCT: u8 = 0x01; // FEATURE ONLY
-pub const REPORT_ID_ISERIALNUMBER: u8 = 0x02; // FEATURE ONLY
-pub const REPORT_ID_IMANUFACTURER: u8 = 0x03; // FEATURE ONLY
-
+pub const REPORT_ID_IDENTIFICAITON: u8 = 0x01; // FEATURE ONLY
 pub const REPORT_ID_RECHARGEABLE: u8 = 0x06; // FEATURE ONLY
 pub const REPORT_ID_PRESENTSTATUS: u8 = 0x07; // INPUT OR FEATURE(required by Windows)
 pub const REPORT_ID_REMAINTIMELIMIT: u8 = 0x08;
@@ -54,18 +52,22 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0x95, 0x01, //     REPORT_COUNT (1)
     0x15, 0x00, //     LOGICAL_MINIMUM (0)
     0x26, 0xFF, 0x00, //     LOGICAL_MAXIMUM (255)
-    0x85, REPORT_ID_IPRODUCT, //     REPORT_ID (1)
+
+    0x85, REPORT_ID_IDENTIFICAITON, //     REPORT_ID (4)
+
     0x09, 0xFE, //     USAGE (iProduct)
     0x79, STRING_ID_PRODUCT, //     STRING INDEX (2)
     0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_ISERIALNUMBER, //     REPORT_ID (2)
+
     0x09, 0xFF, //     USAGE (iSerialNumber)
     0x79, STRING_ID_SERIAL, //  STRING INDEX (3)
     0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_IMANUFACTURER, //     REPORT_ID (3)
+
     0x09, 0xFD, //     USAGE (iManufacturer)
     0x79, STRING_ID_MANUFACTURER, //     STRING INDEX (1)
     0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
+
+
     0x05, 0x85, //     USAGE_PAGE (Battery System) ====================
     0x85, REPORT_ID_RECHARGEABLE, //     REPORT_ID (6)
     0x09, 0x8B, //     USAGE (Rechargable)                  
@@ -237,25 +239,49 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0xC0        // END_COLLECTION
 ];
 
-#[bitfield]
+#[derive(Debug, Default, PartialEq, Eq)]
+#[binary_serde_bitfield(order = BitfieldBitOrder::LsbFirst)]
 struct PresentStatus {
-    charging: B1,                       // bit 0x00
-    discharging: B1,                    // bit 0x01
-    ac_present: B1,                     // bit 0x02
-    battery_present: B1,                // bit 0x03
-    below_remaining_capacity_limit: B1, // bit 0x04
-    temaining_time_limit_expired: B1,   // bit 0x05
-    need_replacement: B1,               // bit 0x06
-    voltage_not_regulated: B1,          // bit 0x07
+    #[bits(1)]
+    charging: bool, // bit 0x00
+    #[bits(1)]
+    discharging: bool, // bit 0x01
+    #[bits(1)]
+    ac_present: bool, // bit 0x02
+    #[bits(1)]
+    battery_present: bool, // bit 0x03
+    #[bits(1)]
+    below_remaining_capacity_limit: bool, // bit 0x04
+    #[bits(1)]
+    temaining_time_limit_expired: bool, // bit 0x05
+    #[bits(1)]
+    need_replacement: bool, // bit 0x06
+    #[bits(1)]
+    voltage_not_regulated: bool, // bit 0x07
 
-    fully_charged: B1,      // bit 0x08
-    fully_discharged: B1,   // bit 0x09
-    shutdown_requested: B1, // bit 0x0A
-    shutdown_imminent: B1,  // bit 0x0B
-    communication_lost: B1, // bit 0x0C
-    overload: B1,           // bit 0x0D
-    unused1: B1,
-    unused2: B1,
+    #[bits(1)]
+    fully_charged: bool, // bit 0x08
+    #[bits(1)]
+    fully_discharged: bool, // bit 0x09
+    #[bits(1)]
+    shutdown_requested: bool, // bit 0x0A
+    #[bits(1)]
+    shutdown_imminent: bool, // bit 0x0B
+    #[bits(1)]
+    communication_lost: bool, // bit 0x0C
+    #[bits(1)]
+    overload: bool, // bit 0x0D
+    #[bits(1)]
+    unused1: bool,
+    #[bits(1)]
+    unused2: bool,
+}
+
+#[derive(Debug, Default, BinarySerde, PartialEq, Eq)]
+struct Identification {
+    i_product: u8,
+    i_manufacturer: u8,
+    i_serial: u8,
 }
 
 pub struct NutDevice {
@@ -300,24 +326,31 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
         report_descriptor: UPS_REPORT_DESCRIPTOR.into(),
     };
 
-    device
-        .reports
-        .insert(REPORT_ID_IPRODUCT, [STRING_ID_PRODUCT].into());
-    device
-        .reports
-        .insert(REPORT_ID_ISERIALNUMBER, [STRING_ID_SERIAL].into());
-    device
-        .reports
-        .insert(REPORT_ID_IMANUFACTURER, [STRING_ID_MANUFACTURER].into());
+    let identification = Identification {
+        i_product: STRING_ID_PRODUCT,
+        i_serial: STRING_ID_SERIAL,
+        i_manufacturer: STRING_ID_MANUFACTURER,
+    };
 
     device.reports.insert(
-        REPORT_ID_PRESENTSTATUS,
-        PresentStatus::new()
-            .with_ac_present(1)
-            .with_battery_present(1)
-            .into_bytes()
+        REPORT_ID_IDENTIFICAITON,
+        identification
+            .binary_serialize_to_array(Endianness::Little)
+            .as_slice()
             .into(),
     );
+
+    let status = PresentStatus {
+        ac_present: true,
+        battery_present: true,
+        ..Default::default()
+    };
+    let data: Vec<u8> = status
+        .binary_serialize_to_array(Endianness::Little)
+        .as_slice()
+        .into();
+
+    device.reports.insert(REPORT_ID_PRESENTSTATUS, data);
     device.reports.insert(REPORT_ID_CAPACITYMODE, [2].into()); /* Percentage */
 
     device
@@ -342,14 +375,43 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
 
 #[cfg(test)]
 mod tests {
+    use binary_serde::recursive_array::RecursiveArray;
+
     use super::*;
 
     #[test]
     fn present_status() {
-        let status = PresentStatus::new().with_discharging(1);
-        assert_eq!(status.discharging(), 1);
-        assert_eq!(status.into_bytes(), [0x02, 0x00]);
+        let status = PresentStatus {
+            discharging: true,
+            shutdown_imminent: true,
+            ..Default::default()
+        };
+
+        let data = status
+            .binary_serialize_to_array(Endianness::Little)
+            .to_array();
+
+        assert_eq!(data, [0x02, 0x08]);
     }
+
+
+
+    #[test]
+    fn identification() {
+        let value = Identification {
+            i_product: 1,
+            i_manufacturer: 2,
+            i_serial: 3,
+            ..Default::default()
+        };
+
+        let data = value
+            .binary_serialize_to_array(Endianness::Little)
+            .to_array();
+
+        assert_eq!(data, [0x01, 0x02, 0x03]);
+    }
+
 
     #[test]
     fn print_report() {

@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+binary_serde = "1.0.24"
 log = "0.4.27"
-modular-bitfield = "0.12.0"

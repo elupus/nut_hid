@@ -94,7 +94,7 @@ fn main() {
         .unwrap();
 
     println!("Waiting for use of device {device_instance_id}");
-    sleep(Duration::from_secs(5));
+    sleep(Duration::from_secs(30));
 
     println!("Closing device");
     unsafe {
