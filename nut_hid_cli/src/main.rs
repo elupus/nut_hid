@@ -2,23 +2,19 @@ use std::sync::Arc;
 use std::sync::mpsc::{Sender, channel};
 use std::{ffi::c_void, thread::sleep, time::Duration};
 
-mod properties;
 mod constants;
+mod properties;
 use constants::*;
 use properties::*;
 
 use windows::Win32::Devices::Enumeration::Pnp::SwDeviceClose;
 use windows::Win32::Foundation::S_OK;
 use windows::{
-    Win32::{
-        Devices::{
-            Enumeration::Pnp::{
-                HSWDEVICE, SW_DEVICE_CREATE_INFO, SWDeviceCapabilitiesDriverRequired,
-                SWDeviceCapabilitiesRemovable, SWDeviceCapabilitiesSilentInstall, SwDeviceCreate,
-            },
-        },
+    Win32::Devices::Enumeration::Pnp::{
+        HSWDEVICE, SW_DEVICE_CREATE_INFO, SWDeviceCapabilitiesDriverRequired,
+        SWDeviceCapabilitiesRemovable, SWDeviceCapabilitiesSilentInstall, SwDeviceCreate,
     },
-    core::{HRESULT},
+    core::HRESULT,
 };
 
 use windows_strings::{PCWSTR, w};
@@ -47,15 +43,39 @@ extern "system" fn create_callback(
     }
 }
 
+use clap::Parser;
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Backend to use
+    #[arg(long, default_value = "dummy")]
+    backend: String,
+
+    /// Host to connect to if supported
+    #[arg(long, default_value = "localhost")]
+    host: String,
+
+    /// Port to connect to if supported
+    #[arg(long, default_value_t = 3494)]
+    port: u32,
+}
+
 fn main() {
     println!("Creating device");
 
+    let args = Args::parse();
+
     let mut properties = PropertiesStore::new();
 
-    properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_HOST, "nuthost2");
-    properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_BACKEND, "dummy");
-    properties.add_u32(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_PORT, 3493);
-
+    properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_HOST, &args.host);
+    properties.add_string(
+        DEVPROP_NUTHID_GUID,
+        DEVPROP_NUTHID_KEY_BACKEND,
+        &args.backend,
+    );
+    properties.add_u32(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_PORT, args.port);
 
     println!("With properties {:?}", properties);
 

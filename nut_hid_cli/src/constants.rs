@@ -1,5 +1,5 @@
 use windows::core::GUID;
-use windows_strings::{w, PCWSTR};
+use windows_strings::{PCWSTR, w};
 
 /* 53c0d411-cfb1-4d29-8f81-e705f3ac17a1 */
 pub const DEVPROP_NUTHID_GUID: GUID = GUID {
@@ -12,7 +12,6 @@ pub const DEVPROP_NUTHID_GUID: GUID = GUID {
 pub const DEVPROP_NUTHID_KEY_HOST: u32 = 2;
 pub const DEVPROP_NUTHID_KEY_PORT: u32 = 3;
 pub const DEVPROP_NUTHID_KEY_BACKEND: u32 = 4;
-
 
 pub const ENUMERATOR_NAME: PCWSTR = w!("NutHidEnumerator");
 pub const HARDWARE_IDS: PCWSTR = w!("root\\NutHidDevice\0");

@@ -1,12 +1,14 @@
 use std::os::raw::c_void;
 
 use windows::{
-    core::GUID, Win32::{
+    Win32::{
         Devices::Properties::{
-            DEVPROPCOMPKEY, DEVPROPERTY, DEVPROP_STORE_SYSTEM, DEVPROP_TYPE_STRING, DEVPROP_TYPE_UINT32
+            DEVPROP_STORE_SYSTEM, DEVPROP_TYPE_STRING, DEVPROP_TYPE_UINT32, DEVPROPCOMPKEY,
+            DEVPROPERTY,
         },
         Foundation::DEVPROPKEY,
-    }
+    },
+    core::GUID,
 };
 use windows_strings::PCWSTR;
 
@@ -56,7 +58,6 @@ impl PropertiesStore {
         self.properties.push(property);
     }
 
-
     pub fn add_u32(&mut self, fmtid: GUID, pid: u32, value: u32) {
         let key = get_comp_key(fmtid, pid);
 
@@ -72,7 +73,6 @@ impl PropertiesStore {
         };
         self.properties.push(property);
     }
-
 
     pub fn get<'a>(&'a self) -> &'a Vec<DEVPROPERTY> {
         &self.properties
