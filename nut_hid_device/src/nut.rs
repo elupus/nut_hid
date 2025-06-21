@@ -7,7 +7,12 @@ use super::*;
 use binary_serde::recursive_array::RecursiveArray;
 use binary_serde::{BinarySerde, BitfieldBitOrder, Endianness, binary_serde_bitfield};
 use constants::*;
-use log::{info};
+use log::{debug, error, info};
+
+use rups::blocking::Connection;
+use rups::{ClientError, ConfigBuilder};
+use std::convert::TryInto;
+ use std::collections::HashSet;
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
 pub const STRING_ID_PRODUCT: u8 = 0x02;
@@ -285,10 +290,81 @@ struct Identification {
     i_serial: u8,
 }
 
+pub struct NutState {
+    pending: VecDeque<(u8, Vec<u8>)>,
+    connection: Option<Connection>,
+    name: String,
+}
+
+
 pub struct NutDevice {
     device: RwLock<DeviceData>,
     device_config: DeviceConfig,
-    pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
+    state: Mutex<NutState>,
+}
+
+fn connect(config: &DeviceConfig) -> Result<(Connection, String), ClientError>
+{
+    let config = ConfigBuilder::new()
+        .with_host((config.host.clone(), config.port as u16).try_into()?)
+        .with_debug(false)
+        .build();
+
+
+    debug!("Connecting: {:?}", &config);
+    let mut connection = Connection::new(&config)?;
+
+    let ups = connection.list_ups()?;
+    let (name, description) = ups.first().ok_or(nut::ClientError::generic("No ups found"))?;
+
+    debug!("Using ups {name} - {description}");
+
+    Ok((connection, name.clone()))
+}
+
+impl NutState {
+    fn get_u8(&mut self, value: &str) -> Option<u8>
+    {
+        let connection = self.connection.as_mut().unwrap();
+        if let Ok(var) = connection.get_var(&self.name, value) {
+            return u8::from_str_radix(&var.value(), 10).ok()
+        }
+        None
+    }
+
+    fn get_str(&mut self, value: &str) -> Option<String>
+    {
+        let connection = self.connection.as_mut().unwrap();
+        let value = match connection.get_var(&self.name, value) {
+            Err(err) => {
+                error!("Failed to get {}: {}", value, err);
+                None
+            },
+            Ok(status) => {
+                Some(status.value())
+            }
+        };
+        value
+    }
+}
+
+impl PresentStatus {
+    fn from_status(ups_status: &str) -> PresentStatus
+    {
+        let fields = ups_status.split(' ');
+        let values = HashSet::<&str>::from_iter(fields);
+
+        PresentStatus {
+            charging: values.contains("CHRG"),
+            discharging: values.contains("DISCHRG"),
+            ac_present: values.contains("OL"),
+            overload: values.contains("OVER"),
+            fully_charged: values.contains("HB"),
+            below_remaining_capacity_limit: values.contains("LB"),
+            battery_present: true,
+            ..Default::default()
+        }
+    }
 }
 
 impl Device for NutDevice {
@@ -298,19 +374,44 @@ impl Device for NutDevice {
 
     fn read(&self) -> Option<(u8, Vec<u8>)> {
         /* get all pending */
-        let mut pending = self.pending.lock().unwrap();
-        if let Some(report) = pending.pop_front() {
-            thread::sleep(Duration::from_secs(2));
+        let mut state = self.state.lock().unwrap();
+        if let Some(report) = state.pending.pop_front() {
             return Some(report);
         }
 
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![80]));
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![70]));
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![60]));
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![50]));
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![60]));
-        pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![70]));
-        pending.pop_front()
+        /* only update periodically */
+        thread::sleep(Duration::from_secs(2));
+
+        if state.connection.is_none() {
+            let (connection, name) = match connect(&self.device_config) {
+                Err(err) => {
+                    error!("Failed to connect {:?}", err);
+                    state.pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![0]));
+                    return state.pending.pop_front();
+                }
+                Ok(result) => result
+            };
+            state.connection = Some(connection);
+            state.name = name;
+        }
+
+        if let Some(value) = state.get_u8("battery.charge")
+        {
+            state.pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![value]));
+        }
+
+
+        if let Some(value) = state.get_u8("battery.runtime")
+        {
+            state.pending.push_back((REPORT_ID_RUNTIMETOEMPTY, vec![value / 60]));
+        }
+
+        if let Some(value) = state.get_str("ups.status")
+        {
+            state.pending.push_back((REPORT_ID_PRESENTSTATUS, struct_to_vec(PresentStatus::from_status(&value))));
+        }
+
+        state.pending.pop_front()
     }
 }
 
@@ -345,8 +446,7 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
     );
 
     let status = PresentStatus {
-        ac_present: true,
-        battery_present: true,
+        communication_lost: true,
         ..Default::default()
     };
 
@@ -359,17 +459,15 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
     device
         .reports
         .insert(REPORT_ID_FULLCHRGECAPACITY, [100].into());
-    device
-        .reports
-        .insert(REPORT_ID_REMAININGCAPACITY, [90].into());
-    device
-        .reports
-        .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
     NutDevice {
         device: RwLock::new(device),
         device_config: device_config,
-        pending: Mutex::new(VecDeque::new()),
+        state: NutState {
+            connection: None,
+            name: "".into(),
+            pending: VecDeque::new()
+        }.into()
     }
 }
 

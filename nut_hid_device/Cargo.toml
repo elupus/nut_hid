@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 binary_serde = "1.0.24"
 log = "0.4.27"
+rups = "0.6.1"

@@ -58,7 +58,7 @@ struct Args {
     host: String,
 
     /// Port to connect to if supported
-    #[arg(long, default_value_t = 3494)]
+    #[arg(long, default_value_t = 3493)]
     port: u32,
 }
 
