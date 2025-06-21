@@ -1,7 +1,8 @@
 use std::{collections::HashMap, sync::RwLock};
 pub mod constants;
 pub mod mini;
-pub mod nut;
+pub mod power_nut;
+pub mod power_dummy;
 
 #[derive(Default)]
 
