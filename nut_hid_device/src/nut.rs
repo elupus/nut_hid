@@ -313,6 +313,11 @@ impl Device for NutDevice {
     }
 }
 
+fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8>
+{
+    data.binary_serialize_to_array(Endianness::Little).as_slice().into()
+}
+
 pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
     let mut device = DeviceData {
         reports: HashMap::new(),
@@ -334,10 +339,7 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
 
     device.reports.insert(
         REPORT_ID_IDENTIFICAITON,
-        identification
-            .binary_serialize_to_array(Endianness::Little)
-            .as_slice()
-            .into(),
+        struct_to_vec(identification)
     );
 
     let status = PresentStatus {
@@ -345,12 +347,8 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
         battery_present: true,
         ..Default::default()
     };
-    let data: Vec<u8> = status
-        .binary_serialize_to_array(Endianness::Little)
-        .as_slice()
-        .into();
 
-    device.reports.insert(REPORT_ID_PRESENTSTATUS, data);
+    device.reports.insert(REPORT_ID_PRESENTSTATUS, struct_to_vec(status));
     device.reports.insert(REPORT_ID_CAPACITYMODE, [2].into()); /* Percentage */
 
     device
@@ -375,8 +373,6 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
 
 #[cfg(test)]
 mod tests {
-    use binary_serde::recursive_array::RecursiveArray;
-
     use super::*;
 
     #[test]
@@ -387,9 +383,7 @@ mod tests {
             ..Default::default()
         };
 
-        let data = status
-            .binary_serialize_to_array(Endianness::Little)
-            .to_array();
+        let data = struct_to_vec(status);
 
         assert_eq!(data, [0x02, 0x08]);
     }
@@ -405,9 +399,7 @@ mod tests {
             ..Default::default()
         };
 
-        let data = value
-            .binary_serialize_to_array(Endianness::Little)
-            .to_array();
+        let data = struct_to_vec(value);
 
         assert_eq!(data, [0x01, 0x02, 0x03]);
     }
