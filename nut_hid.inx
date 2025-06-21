@@ -68,6 +68,7 @@ ServiceBinary="%13%\nut_hid.dll"
 
 [NutHidDriver_AddProperty]
 {%DEVPROP_NUTHID_GUID%}, 2, 18,, "localhost"
+{%DEVPROP_NUTHID_GUID%}, 4, 18,, "nut"
 
 
 ; ================= copy files =====================

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::thread::{self};
 use std::{os::windows::ffi::OsStrExt, slice, string::String};
 
+use wdk_sys::STATUS_NOT_SUPPORTED;
 use wdk_sys::{
     _HID_DESCRIPTOR__HID_DESCRIPTOR_DESC_LIST, _WDF_IO_QUEUE_DISPATCH_TYPE,
     _WDF_TRI_STATE::WdfUseDefault, HID_DESCRIPTOR, HID_DEVICE_ATTRIBUTES, NT_ERROR, NT_SUCCESS,
@@ -134,7 +135,17 @@ fn get_device_config(device: WDFDEVICE) -> Result<DeviceConfig, NTSTATUS> {
         constants::DEVPROP_NUTHID_KEY_PORT,
     )?;
 
-    Ok(DeviceConfig { host, port })
+    let backend = wdf_device_query_property_string(
+        device,
+        constants::DEVPROP_NUTHID_GUID,
+        constants::DEVPROP_NUTHID_KEY_BACKEND,
+    )?;
+
+    Ok(DeviceConfig {
+        host,
+        port,
+        backend,
+    })
 }
 
 extern "C" fn evt_driver_device_add(
@@ -171,7 +182,12 @@ extern "C" fn evt_driver_device_add(
     };
 
     debug!("Build hid descriptors");
-    let hid_device = Arc::new(nut_hid_device::nut::new_nut_device(device_config));
+    let hid_device = Arc::new(
+        match nut_hid_device::DeviceEnum::from_config(device_config) {
+            Err(_error) => return STATUS_NOT_SUPPORTED,
+            Ok(device) => device,
+        },
+    );
     let hid_data = hid_device.data().read().unwrap();
 
     let hid_report_desc = &hid_data.report_descriptor;

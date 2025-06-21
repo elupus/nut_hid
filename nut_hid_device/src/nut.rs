@@ -7,6 +7,7 @@ use super::*;
 use binary_serde::recursive_array::RecursiveArray;
 use binary_serde::{BinarySerde, BitfieldBitOrder, Endianness, binary_serde_bitfield};
 use constants::*;
+use log::{info};
 
 pub const STRING_ID_MANUFACTURER: u8 = 0x01;
 pub const STRING_ID_PRODUCT: u8 = 0x02;
@@ -284,13 +285,13 @@ struct Identification {
     i_serial: u8,
 }
 
-pub struct PowerDummyDevice {
+pub struct NutDevice {
     device: RwLock<DeviceData>,
     device_config: DeviceConfig,
     pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
 }
 
-impl Device for PowerDummyDevice {
+impl Device for NutDevice {
     fn data(&self) -> &RwLock<DeviceData> {
         &self.device
     }
@@ -318,7 +319,8 @@ fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8>
     data.binary_serialize_to_array(Endianness::Little).as_slice().into()
 }
 
-pub fn new_dummy_device(device_config: DeviceConfig) -> PowerDummyDevice {
+pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
+    info!("Creating NUT backend");
     let mut device = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
@@ -364,7 +366,7 @@ pub fn new_dummy_device(device_config: DeviceConfig) -> PowerDummyDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    PowerDummyDevice {
+    NutDevice {
         device: RwLock::new(device),
         device_config: device_config,
         pending: Mutex::new(VecDeque::new()),

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use super::*;
 use constants::*;
+use log::{info};
+
 
 #[repr(C, packed(1))]
 #[derive(Debug, Copy, Clone)]
@@ -75,6 +77,7 @@ impl Device for MiniDevice {
 }
 
 pub fn new_mini_device() -> MiniDevice {
+    info!("Creating Mini backend");
     let data = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),

@@ -11,6 +11,7 @@ pub const DEVPROP_NUTHID_GUID: GUID = GUID {
 
 pub const DEVPROP_NUTHID_KEY_HOST: u32 = 2;
 pub const DEVPROP_NUTHID_KEY_PORT: u32 = 3;
+pub const DEVPROP_NUTHID_KEY_BACKEND: u32 = 4;
 
 
 pub const ENUMERATOR_NAME: PCWSTR = w!("NutHidEnumerator");

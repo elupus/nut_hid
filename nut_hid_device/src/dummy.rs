@@ -2,6 +2,8 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
+use log::{info};
+
 
 use super::*;
 use binary_serde::recursive_array::RecursiveArray;
@@ -284,13 +286,13 @@ struct Identification {
     i_serial: u8,
 }
 
-pub struct NutDevice {
+pub struct DummyDevice {
     device: RwLock<DeviceData>,
     device_config: DeviceConfig,
     pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
 }
 
-impl Device for NutDevice {
+impl Device for DummyDevice {
     fn data(&self) -> &RwLock<DeviceData> {
         &self.device
     }
@@ -318,7 +320,8 @@ fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8>
     data.binary_serialize_to_array(Endianness::Little).as_slice().into()
 }
 
-pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
+pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
+    info!("Creating Dummy backend");
     let mut device = DeviceData {
         reports: HashMap::new(),
         strings: HashMap::new(),
@@ -364,7 +367,7 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
         .reports
         .insert(REPORT_ID_RUNTIMETOEMPTY, [121].into()); /* Minutes remaining */
 
-    NutDevice {
+    DummyDevice {
         device: RwLock::new(device),
         device_config: device_config,
         pending: Mutex::new(VecDeque::new()),

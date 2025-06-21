@@ -53,6 +53,7 @@ fn main() {
     let mut properties = PropertiesStore::new();
 
     properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_HOST, "nuthost2");
+    properties.add_string(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_BACKEND, "dummy");
     properties.add_u32(DEVPROP_NUTHID_GUID, DEVPROP_NUTHID_KEY_PORT, 3493);
 
 
