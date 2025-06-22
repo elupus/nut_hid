@@ -10,7 +10,7 @@ use constants::*;
 use log::{debug, error, info};
 
 use rups::blocking::Connection;
-use rups::{ClientError, ConfigBuilder};
+use rups::{ClientError, ConfigBuilder, NutError};
 use std::collections::HashSet;
 use std::convert::TryInto;
 
@@ -243,6 +243,10 @@ impl NutState {
     fn get_str(&mut self, value: &str) -> Option<String> {
         let connection = self.connection.as_mut().unwrap();
         let value = match connection.get_var(&self.name, value) {
+            Err(ClientError::Nut(NutError::VarNotSupported)) => {
+                debug!("Variable {} not supported", value);
+                None
+            }
             Err(err) => {
                 error!("Failed to get {}: {}", value, err);
                 None
@@ -329,13 +333,12 @@ impl Device for NutDevice {
             .or(Some("".into()))
             .unwrap();
 
-        state.pending.push_back((
-            REPORT_ID_PRESENTSTATUS,
-            struct_to_vec(PresentStatus::from_status(
-                &ups_status,
-                &battery_charger_status,
-            )),
-        ));
+        let present_status = PresentStatus::from_status(&ups_status, &battery_charger_status);
+        debug!("Present status: {:?}", present_status);
+
+        state
+            .pending
+            .push_back((REPORT_ID_PRESENTSTATUS, struct_to_vec(present_status)));
 
         state.pending.pop_front()
     }
