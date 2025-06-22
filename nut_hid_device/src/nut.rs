@@ -11,8 +11,8 @@ use log::{debug, error, info};
 
 use rups::blocking::Connection;
 use rups::{ClientError, ConfigBuilder};
-use std::convert::TryInto;
 use std::collections::HashSet;
+use std::convert::TryInto;
 
 const STRING_ID_MANUFACTURER: u8 = 0x01;
 const STRING_ID_PRODUCT: u8 = 0x02;
@@ -169,7 +169,7 @@ struct PresentStatus {
     #[bits(1)]
     below_remaining_capacity_limit: bool, // bit 0x04
     #[bits(1)]
-    temaining_time_limit_expired: bool, // bit 0x05
+    remaining_time_limit_expired: bool, // bit 0x05
     #[bits(1)]
     need_replacement: bool, // bit 0x06
     #[bits(1)]
@@ -206,26 +206,25 @@ pub struct NutState {
     name: String,
 }
 
-
 pub struct NutDevice {
     device: RwLock<DeviceData>,
     device_config: DeviceConfig,
     state: Mutex<NutState>,
 }
 
-fn connect(config: &DeviceConfig) -> Result<(Connection, String), ClientError>
-{
+fn connect(config: &DeviceConfig) -> Result<(Connection, String), ClientError> {
     let config = ConfigBuilder::new()
         .with_host((config.host.clone(), config.port as u16).try_into()?)
         .with_debug(false)
         .build();
 
-
     debug!("Connecting: {:?}", &config);
     let mut connection = Connection::new(&config)?;
 
     let ups = connection.list_ups()?;
-    let (name, description) = ups.first().ok_or(nut::ClientError::generic("No ups found"))?;
+    let (name, description) = ups
+        .first()
+        .ok_or(nut::ClientError::generic("No ups found"))?;
 
     debug!("Using ups {name} - {description}");
 
@@ -233,45 +232,44 @@ fn connect(config: &DeviceConfig) -> Result<(Connection, String), ClientError>
 }
 
 impl NutState {
-    fn get_u8(&mut self, value: &str) -> Option<u8>
-    {
+    fn get_u8(&mut self, value: &str) -> Option<u8> {
         let connection = self.connection.as_mut().unwrap();
         if let Ok(var) = connection.get_var(&self.name, value) {
-            return u8::from_str_radix(&var.value(), 10).ok()
+            return u8::from_str_radix(&var.value(), 10).ok();
         }
         None
     }
 
-    fn get_str(&mut self, value: &str) -> Option<String>
-    {
+    fn get_str(&mut self, value: &str) -> Option<String> {
         let connection = self.connection.as_mut().unwrap();
         let value = match connection.get_var(&self.name, value) {
             Err(err) => {
                 error!("Failed to get {}: {}", value, err);
                 None
-            },
-            Ok(status) => {
-                Some(status.value())
             }
+            Ok(status) => Some(status.value()),
         };
         value
     }
 }
 
 impl PresentStatus {
-    fn from_status(ups_status: &str) -> PresentStatus
-    {
+    fn from_status(ups_status: &str, battery_charger_status: &str) -> PresentStatus {
         let fields = ups_status.split(' ');
         let values = HashSet::<&str>::from_iter(fields);
 
         PresentStatus {
-            charging: values.contains("CHRG"),
-            discharging: values.contains("DISCHRG"),
+            charging: values.contains("CHRG") || battery_charger_status == "charging",
+            discharging: values.contains("DISCHRG") || battery_charger_status == "discharging",
             ac_present: values.contains("OL"),
             overload: values.contains("OVER"),
             fully_charged: values.contains("HB"),
             below_remaining_capacity_limit: values.contains("LB"),
-            battery_present: true,
+            communication_lost: values.contains("OFF")
+                || values.contains("WAIT")
+                || ups_status == "",
+            battery_present: !values.contains("BYPASS"),
+            need_replacement: values.contains("RB"),
             ..Default::default()
         }
     }
@@ -296,38 +294,57 @@ impl Device for NutDevice {
             let (connection, name) = match connect(&self.device_config) {
                 Err(err) => {
                     error!("Failed to connect {:?}", err);
-                    state.pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![0]));
+                    state
+                        .pending
+                        .push_back((REPORT_ID_REMAININGCAPACITY, vec![0]));
                     return state.pending.pop_front();
                 }
-                Ok(result) => result
+                Ok(result) => result,
             };
             state.connection = Some(connection);
             state.name = name;
         }
 
-        if let Some(value) = state.get_u8("battery.charge")
-        {
-            state.pending.push_back((REPORT_ID_REMAININGCAPACITY, vec![value]));
+        if let Some(value) = state.get_u8("battery.charge") {
+            state
+                .pending
+                .push_back((REPORT_ID_REMAININGCAPACITY, vec![value]));
         }
 
-
-        if let Some(value) = state.get_u8("battery.runtime")
-        {
-            state.pending.push_back((REPORT_ID_RUNTIMETOEMPTY, vec![value / 60]));
+        if let Some(value) = state.get_u8("battery.charge.low") {
+            state
+                .pending
+                .push_back((REPORT_ID_REMNCAPACITYLIMIT, vec![value]));
         }
 
-        if let Some(value) = state.get_str("ups.status")
-        {
-            state.pending.push_back((REPORT_ID_PRESENTSTATUS, struct_to_vec(PresentStatus::from_status(&value))));
+        if let Some(value) = state.get_u8("battery.runtime") {
+            state
+                .pending
+                .push_back((REPORT_ID_RUNTIMETOEMPTY, vec![value / 60]));
         }
+
+        let ups_status = state.get_str("ups.status").or(Some("".into())).unwrap();
+        let battery_charger_status = state
+            .get_str("battery_charger_status")
+            .or(Some("".into()))
+            .unwrap();
+
+        state.pending.push_back((
+            REPORT_ID_PRESENTSTATUS,
+            struct_to_vec(PresentStatus::from_status(
+                &ups_status,
+                &battery_charger_status,
+            )),
+        ));
 
         state.pending.pop_front()
     }
 }
 
-fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8>
-{
-    data.binary_serialize_to_array(Endianness::Little).as_slice().into()
+fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8> {
+    data.binary_serialize_to_array(Endianness::Little)
+        .as_slice()
+        .into()
 }
 
 pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
@@ -350,17 +367,18 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
         i_manufacturer: STRING_ID_MANUFACTURER,
     };
 
-    device.reports.insert(
-        REPORT_ID_IDENTIFICAITON,
-        struct_to_vec(identification)
-    );
+    device
+        .reports
+        .insert(REPORT_ID_IDENTIFICAITON, struct_to_vec(identification));
 
     let status = PresentStatus {
         communication_lost: true,
         ..Default::default()
     };
 
-    device.reports.insert(REPORT_ID_PRESENTSTATUS, struct_to_vec(status));
+    device
+        .reports
+        .insert(REPORT_ID_PRESENTSTATUS, struct_to_vec(status));
     device.reports.insert(REPORT_ID_CAPACITYMODE, [2].into()); /* Percentage */
 
     device
@@ -376,8 +394,9 @@ pub fn new_nut_device(device_config: DeviceConfig) -> NutDevice {
         state: NutState {
             connection: None,
             name: "".into(),
-            pending: VecDeque::new()
-        }.into()
+            pending: VecDeque::new(),
+        }
+        .into(),
     }
 }
 
@@ -398,8 +417,6 @@ mod tests {
         assert_eq!(data, [0x02, 0x08]);
     }
 
-
-
     #[test]
     fn identification() {
         let value = Identification {
@@ -413,7 +430,6 @@ mod tests {
 
         assert_eq!(data, [0x01, 0x02, 0x03]);
     }
-
 
     #[test]
     fn print_report() {
