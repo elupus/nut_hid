@@ -19,7 +19,7 @@ DefaultDestDir = 13
 1=%Disk_Description%,,,
 
 [SourceDisksFiles]
-nut_hid.dll=1
+nut_hid_driver.dll=1
 
 ; ================= Device section =====================
 
@@ -64,7 +64,7 @@ UmdfHostProcessSharing=ProcessSharingDisabled
 
 [NutHidDriver_Install]
 UmdfLibraryVersion=$UMDFVERSION$
-ServiceBinary="%13%\nut_hid.dll"
+ServiceBinary="%13%\nut_hid_driver.dll"
 
 [NutHidDriver_AddProperty]
 {%DEVPROP_NUTHID_GUID%}, 2, 18,, "localhost"
@@ -74,7 +74,7 @@ ServiceBinary="%13%\nut_hid.dll"
 ; ================= copy files =====================
 
 [UMDriverCopy]
-nut_hid.dll
+nut_hid_driver.dll
 
 ;---------------------------------------------------------------;
 

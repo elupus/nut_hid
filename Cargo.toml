@@ -1,37 +1,12 @@
-[package]
-name = "nut_hid"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-log = "0.4.27"
-wdk = "0.3.1"
-wdk-alloc = "0.3.1"
-wdk-panic = "0.3.1"
-wdk-sys = { version = "0.4.0", features = ["hid"] }
-nut_hid_device = { path = "nut_hid_device" }
-
-[build-dependencies]
-wdk-build = "0.4.0"
-
-[patch.crates-io]
-#wdk-build = {git = "https://github.com/elupus/windows-drivers-rs.git", branch = "add_hidport"}
-wdk-build = {path = "C:/Users/Joakim/source/rust/windows-drivers-rs/crates/wdk-build"}
-
-[lib]
-crate-type = ["cdylib"]
-
-[package.metadata.wdk.driver-model]
-driver-type = "UMDF"
-umdf-version-major = 2
-target-umdf-version-minor = 33
-
 [workspace]
 resolver = "3"
-members = [ "nut_hid_cli","nut_hid_device"]
+members = [ "nut_hid_cli","nut_hid_device", "nut_hid_driver"]
 
-# [profile.dev]
-# panic = "abort"
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Joakim Plate"]
 
-# [profile.release]
-# panic = "abort"
+[patch.crates-io]
+wdk-build = {git = "https://github.com/elupus/windows-drivers-rs.git", branch = "add_hidport"}
+# wdk-build = {path = "C:/Users/Joakim/source/rust/windows-drivers-rs/crates/wdk-build"}

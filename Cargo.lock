@@ -380,19 +380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nut_hid"
-version = "0.1.0"
-dependencies = [
- "log",
- "nut_hid_device",
- "wdk",
- "wdk-alloc",
- "wdk-build",
- "wdk-panic",
- "wdk-sys",
-]
-
-[[package]]
 name = "nut_hid_cli"
 version = "0.1.0"
 dependencies = [
@@ -409,6 +396,19 @@ dependencies = [
  "binary_serde",
  "log",
  "rups",
+]
+
+[[package]]
+name = "nut_hid_driver"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nut_hid_device",
+ "wdk",
+ "wdk-alloc",
+ "wdk-build",
+ "wdk-panic",
+ "wdk-sys",
 ]
 
 [[package]]
@@ -812,6 +812,7 @@ dependencies = [
 [[package]]
 name = "wdk-build"
 version = "0.4.0"
+source = "git+https://github.com/elupus/windows-drivers-rs.git?branch=add_hidport#7f33cd3a150a8efac2b8852cf160a9bc63995a19"
 dependencies = [
  "anyhow",
  "bindgen",

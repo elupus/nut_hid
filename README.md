@@ -43,7 +43,7 @@ src/                    # Driver source code
 2. **Install the driver:**
 
    ```bat
-   pnputil.exe /add-driver nut_hid.inf /install
+   pnputil.exe /add-driver nut_hid_driver.inf /install
    ```
 
 3. **Add a virtual device:**
