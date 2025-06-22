@@ -48,7 +48,7 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0x05, 0x84, // USAGE_PAGE (Power Device)
     0x09, 0x04, // USAGE (UPS)
     0xA1, 0x01, // COLLECTION (Application)
-    0x09, 0x24, //   USAGE (Sink)
+    0x09, 0x24, //   USAGE (PowerSummary)
     0xA1, 0x02, //   COLLECTION (Logical)
     0x75, 0x08, //     REPORT_SIZE (8)
     0x95, 0x01, //     REPORT_COUNT (1)
