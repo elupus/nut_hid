@@ -405,7 +405,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn present_status() {
+    fn present_status_to_bytes() {
         let status = PresentStatus {
             discharging: true,
             shutdown_imminent: true,
@@ -415,6 +415,55 @@ mod tests {
         let data = struct_to_vec(status);
 
         assert_eq!(data, [0x02, 0x08]);
+    }
+
+    #[test]
+    fn present_status_from_status() {
+        let status = PresentStatus::from_status("CHRG DISCHRG OL", "");
+        assert_eq!(
+            status,
+            PresentStatus {
+                charging: true,
+                discharging: true,
+                ac_present: true,
+                battery_present: true,
+                ..Default::default()
+            }
+        );
+
+        let status = PresentStatus::from_status("OL", "");
+        assert_eq!(
+            status,
+            PresentStatus {
+                ac_present: true,
+                battery_present: true,
+                ..Default::default()
+            }
+        );
+
+        let status = PresentStatus::from_status("OL RB", "charging");
+        assert_eq!(
+            status,
+            PresentStatus {
+                charging: true,
+                ac_present: true,
+                need_replacement: true,
+                battery_present: true,
+                ..Default::default()
+            }
+        );
+
+        let status = PresentStatus::from_status("OB OVER", "discharging");
+        assert_eq!(
+            status,
+            PresentStatus {
+                discharging: true,
+                ac_present: false,
+                overload: true,
+                battery_present: true,
+                ..Default::default()
+            }
+        );
     }
 
     #[test]
