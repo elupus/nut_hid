@@ -2,8 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 use constants::*;
-use log::{info};
-
+use log::info;
 
 #[repr(C, packed(1))]
 #[derive(Debug, Copy, Clone)]

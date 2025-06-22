@@ -12,43 +12,23 @@ use log::{debug, error, info};
 use rups::blocking::Connection;
 use rups::{ClientError, ConfigBuilder};
 use std::convert::TryInto;
- use std::collections::HashSet;
+use std::collections::HashSet;
 
-pub const STRING_ID_MANUFACTURER: u8 = 0x01;
-pub const STRING_ID_PRODUCT: u8 = 0x02;
-pub const STRING_ID_SERIAL: u8 = 0x03;
-pub const STRING_ID_DEVICECHEMISTRY: u8 = 0x04;
-pub const STRING_ID_OEMVENDOR: u8 = 0x05;
-
-pub const REPORT_ID_IDENTIFICAITON: u8 = 0x01; // FEATURE ONLY
-pub const REPORT_ID_RECHARGEABLE: u8 = 0x06; // FEATURE ONLY
-pub const REPORT_ID_PRESENTSTATUS: u8 = 0x07; // INPUT OR FEATURE(required by Windows)
-pub const REPORT_ID_REMAINTIMELIMIT: u8 = 0x08;
-pub const REPORT_ID_MANUFACTUREDATE: u8 = 0x09;
-pub const REPORT_ID_CONFIGVOLTAGE: u8 = 0x0A; // 10 FEATURE ONLY
-pub const REPORT_ID_VOLTAGE: u8 = 0x0B; // 11 INPUT (NA) OR FEATURE(implemented)
-pub const REPORT_ID_REMAININGCAPACITY: u8 = 0x0C; // 12 INPUT OR FEATURE(required by Windows)
-pub const REPORT_ID_RUNTIMETOEMPTY: u8 = 0x0D;
-pub const REPORT_ID_FULLCHRGECAPACITY: u8 = 0x0E; // 14 FEATURE ONLY. Last Full Charge Capacity 
-pub const REPORT_ID_WARNCAPACITYLIMIT: u8 = 0x0F;
-pub const REPORT_ID_CPCTYGRANULARITY1: u8 = 0x10;
-pub const REPORT_ID_REMNCAPACITYLIMIT: u8 = 0x11;
-pub const REPORT_ID_DELAYBE4SHUTDOWN: u8 = 0x12; // 18 FEATURE ONLY
-pub const REPORT_ID_DELAYBE4REBOOT: u8 = 0x13;
-pub const REPORT_ID_AUDIBLEALARMCTRL: u8 = 0x14; // 20 INPUT OR FEATURE
-pub const REPORT_ID_CURRENT: u8 = 0x15; // 21 FEATURE ONLY
-pub const REPORT_ID_CAPACITYMODE: u8 = 0x16;
-pub const REPORT_ID_DESIGNCAPACITY: u8 = 0x17;
-pub const REPORT_ID_CPCTYGRANULARITY2: u8 = 0x18;
-pub const REPORT_ID_AVERAGETIME2FULL: u8 = 0x1A;
-pub const REPORT_ID_AVERAGECURRENT: u8 = 0x1B;
-pub const REPORT_ID_AVERAGETIME2EMPTY: u8 = 0x1C;
-
-pub const REPORT_ID_IDEVICECHEMISTRY: u8 = 0x1F; // Feature
-pub const REPORT_ID_IOEMINFORMATION: u8 = 0x20; // Feature
+const STRING_ID_MANUFACTURER: u8 = 0x01;
+const STRING_ID_PRODUCT: u8 = 0x02;
+const STRING_ID_SERIAL: u8 = 0x03;
+const REPORT_ID_IDENTIFICAITON: u8 = 0x01; // FEATURE ONLY
+const REPORT_ID_PRESENTSTATUS: u8 = 0x07; // INPUT OR FEATURE(required by Windows)
+const REPORT_ID_MANUFACTUREDATE: u8 = 0x09;
+const REPORT_ID_REMAININGCAPACITY: u8 = 0x0C; // 12 INPUT OR FEATURE(required by Windows)
+const REPORT_ID_RUNTIMETOEMPTY: u8 = 0x0D;
+const REPORT_ID_FULLCHRGECAPACITY: u8 = 0x0E; // 14 FEATURE ONLY. Last Full Charge Capacity 
+const REPORT_ID_REMNCAPACITYLIMIT: u8 = 0x11;
+const REPORT_ID_CAPACITYMODE: u8 = 0x16;
+const REPORT_ID_DESIGNCAPACITY: u8 = 0x17;
 
 #[rustfmt::skip]
-pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
+const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0x05, 0x84, // USAGE_PAGE (Power Device)
     0x09, 0x04, // USAGE (UPS)
     0xA1, 0x01, // COLLECTION (Application)
@@ -75,26 +55,8 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
 
 
     0x05, 0x85, //     USAGE_PAGE (Battery System) ====================
-    0x85, REPORT_ID_RECHARGEABLE, //     REPORT_ID (6)
-    0x09, 0x8B, //     USAGE (Rechargable)                  
-    0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_IDEVICECHEMISTRY, //     REPORT_ID (31)
-    0x09, 0x89, //     USAGE (iDeviceChemistry)
-    0x79, STRING_ID_DEVICECHEMISTRY, //     STRING INDEX (4)
-    0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_IOEMINFORMATION,  //     REPORT_ID (32)
-    0x09, 0x8F, //     USAGE (iOEMInformation)
-    0x79, STRING_ID_OEMVENDOR, //     STRING INDEX (5)
-    0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
     0x85, REPORT_ID_CAPACITYMODE, //     REPORT_ID (22)
     0x09, 0x2C, //     USAGE (CapacityMode)
-    0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_CPCTYGRANULARITY1, //     REPORT_ID (16)
-    0x09, 0x8D, //     USAGE (CapacityGranularity1)
-    0x26, 0x64,0x00, //     LOGICAL_MAXIMUM (100)    
-    0xB1, 0x22, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_CPCTYGRANULARITY2, //     REPORT_ID (24)
-    0x09, 0x8E, //     USAGE (CapacityGranularity2)
     0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
     0x85, REPORT_ID_FULLCHRGECAPACITY, //     REPORT_ID (14)        
     0x09, 0x67, //     USAGE (FullChargeCapacity)
@@ -107,9 +69,6 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0x81, 0xA3, //     INPUT (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
     0x09, 0x66, //     USAGE (RemainingCapacity)
     0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x85, REPORT_ID_WARNCAPACITYLIMIT, //     REPORT_ID (15)
-    0x09, 0x8C, //     USAGE (WarningCapacityLimit)
-    0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
     0x85, REPORT_ID_REMNCAPACITYLIMIT, //     REPORT_ID (17)
     0x09, 0x29, //     USAGE (RemainingCapacityLimit)
     0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
@@ -118,61 +77,12 @@ pub const UPS_REPORT_DESCRIPTOR: &[u8] = &[
     0x75, 0x10, //     REPORT_SIZE (16)
     0x27, 0xFF, 0xFF, 0x00, 0x00, //     LOGICAL_MAXIMUM (65534)
     0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x85, REPORT_ID_AVERAGETIME2FULL, //     REPORT_ID (26)
-    0x09, 0x6A, //     USAGE (AverageTimeToFull)
-    0x27, 0xFF, 0xFF, 0x00, 0x00, //     LOGICAL_MAXIMUM (65534)
-    0x66, 0x01, 0x10, //     UNIT (Seconds)
-    0x55, 0x00, //     UNIT_EXPONENT (0)
-    0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield) 
-    0x85, REPORT_ID_AVERAGETIME2EMPTY, //     REPORT_ID (28)
-    0x09, 0x69, //     USAGE (AverageTimeToEmpty)  
-    0x81, 0xA3, //     INPUT (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
-    0x09, 0x69, //     USAGE (AverageTimeToEmpty)
-    0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
     0x85, REPORT_ID_RUNTIMETOEMPTY, //     REPORT_ID (13)    
     0x09, 0x68, //     USAGE (RunTimeToEmpty)  
     0x81, 0xA3, //     INPUT (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
     0x09, 0x68, //     USAGE (RunTimeToEmpty)
     0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)      
-    0x85, REPORT_ID_REMAINTIMELIMIT, //     REPORT_ID (8)
-    0x09, 0x2A, //     USAGE (RemainingTimeLimit)
-    0x75, 0x10, //     REPORT_SIZE (16)
-    0x27, 0x64, 0x05, 0x00, 0x00, //     LOGICAL_MAXIMUM (1380)
-    0x16, 0x78, 0x00, //     LOGICAL_MINIMUM (120)
-    0x81, 0x22, //     INPUT (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
-    0x09, 0x2A, //     USAGE (RemainingTimeLimit)
-    0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x05, 0x84, //     USAGE_PAGE (Power Device) ====================
-    0x85, REPORT_ID_DELAYBE4SHUTDOWN, //     REPORT_ID (18)
-    0x09, 0x57, //     USAGE (DelayBeforeShutdown)
-    0x16, 0x00, 0x80, //     LOGICAL_MINIMUM (-32768)
-    0x27, 0xFF, 0x7F, 0x00, 0x00, //     LOGICAL_MAXIMUM (32767)
-    0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x85, REPORT_ID_DELAYBE4REBOOT, //     REPORT_ID (19)
-    0x09, 0x55, //     USAGE (DelayBeforeReboot)
-    0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x85, REPORT_ID_CONFIGVOLTAGE, //     REPORT_ID (10)
-    0x09, 0x40, //     USAGE (ConfigVoltage)
-    0x15, 0x00, //     LOGICAL_MINIMUM (0)
-    0x27, 0xFF, 0xFF, 0x00, 0x00, //     LOGICAL_MAXIMUM (65535)
-    0x67, 0x21, 0xD1, 0xF0, 0x00, //     UNIT (Centivolts)
-    0x55, 0x05, //     UNIT_EXPONENT (5)
-    0xB1, 0x23, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Nonvolatile, Bitfield)
-    0x85, REPORT_ID_VOLTAGE, //     REPORT_ID (11)
-    0x09, 0x30, //     USAGE (Voltage)
-    0x81, 0xA3, //     INPUT (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
-    0x09, 0x30, //     USAGE (Voltage)
-    0xB1, 0xA3, //     FEATURE (Constant, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
-    0x85, REPORT_ID_AUDIBLEALARMCTRL, //     REPORT_ID (20)
-    0x09, 0x5A, //     USAGE (AudibleAlarmControl)
-    0x75, 0x08, //     REPORT_SIZE (8)
-    0x15, 0x01, //     LOGICAL_MINIMUM (1)
-    0x25, 0x03, //     LOGICAL_MAXIMUM (3)
-    0x65, 0x00, //     UNIT (0)
-    0x55, 0x00, //     UNIT_EXPONENT (0)
-    0x81, 0x22, //     INPUT (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Bitfield)
-    0x09, 0x5A, //     USAGE (AudibleAlarmControl)
-    0xB1, 0xA2, //     FEATURE (Data, Variable, Absolute, No Wrap, Linear, No Preferred, No Null Position, Volatile, Bitfield)
+    0x05, 0x84, //     USAGE_PAGE (Power Device)
     0x09, 0x02, //     USAGE (PresentStatus)
     0xA1, 0x02, //     COLLECTION (Logical)
     0x85, REPORT_ID_PRESENTSTATUS, //       REPORT_ID (7)

@@ -1,9 +1,8 @@
+use log::info;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use log::{info};
-
 
 use super::*;
 use binary_serde::recursive_array::RecursiveArray;
@@ -315,9 +314,10 @@ impl Device for DummyDevice {
     }
 }
 
-fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8>
-{
-    data.binary_serialize_to_array(Endianness::Little).as_slice().into()
+fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8> {
+    data.binary_serialize_to_array(Endianness::Little)
+        .as_slice()
+        .into()
 }
 
 pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
@@ -340,10 +340,9 @@ pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
         i_manufacturer: STRING_ID_MANUFACTURER,
     };
 
-    device.reports.insert(
-        REPORT_ID_IDENTIFICAITON,
-        struct_to_vec(identification)
-    );
+    device
+        .reports
+        .insert(REPORT_ID_IDENTIFICAITON, struct_to_vec(identification));
 
     let status = PresentStatus {
         ac_present: true,
@@ -351,7 +350,9 @@ pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
         ..Default::default()
     };
 
-    device.reports.insert(REPORT_ID_PRESENTSTATUS, struct_to_vec(status));
+    device
+        .reports
+        .insert(REPORT_ID_PRESENTSTATUS, struct_to_vec(status));
     device.reports.insert(REPORT_ID_CAPACITYMODE, [2].into()); /* Percentage */
 
     device
@@ -391,8 +392,6 @@ mod tests {
         assert_eq!(data, [0x02, 0x08]);
     }
 
-
-
     #[test]
     fn identification() {
         let value = Identification {
@@ -406,7 +405,6 @@ mod tests {
 
         assert_eq!(data, [0x01, 0x02, 0x03]);
     }
-
 
     #[test]
     fn print_report() {

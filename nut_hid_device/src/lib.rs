@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::RwLock};
 
 use crate::{dummy::DummyDevice, mini::MiniDevice, nut::NutDevice};
 pub mod constants;
+pub mod dummy;
 pub mod mini;
 pub mod nut;
-pub mod dummy;
 
 #[derive(Default)]
 
@@ -32,38 +32,32 @@ pub trait Device {
     fn read(&self) -> Option<(u8, Vec<u8>)>;
 }
 
-pub enum DeviceEnum
-{
+pub enum DeviceEnum {
     NutDevice(NutDevice),
     DummyDevice(DummyDevice),
     MiniDevice(MiniDevice),
 }
 
-impl Device for DeviceEnum
-{
-    fn data(&self) -> &RwLock<DeviceData>
-    {
+impl Device for DeviceEnum {
+    fn data(&self) -> &RwLock<DeviceData> {
         match self {
             DeviceEnum::NutDevice(device) => device.data(),
             DeviceEnum::DummyDevice(device) => device.data(),
-            DeviceEnum::MiniDevice(device) => device.data()
+            DeviceEnum::MiniDevice(device) => device.data(),
         }
     }
 
-    fn read(&self) -> Option<(u8, Vec<u8>)>
-    {
+    fn read(&self) -> Option<(u8, Vec<u8>)> {
         match self {
             DeviceEnum::NutDevice(device) => device.read(),
             DeviceEnum::DummyDevice(device) => device.read(),
-            DeviceEnum::MiniDevice(device) => device.read()
+            DeviceEnum::MiniDevice(device) => device.read(),
         }
     }
 }
 
-impl DeviceEnum
-{
-    pub fn from_config(config: DeviceConfig) -> Result<DeviceEnum, DeviceError>
-    {
+impl DeviceEnum {
+    pub fn from_config(config: DeviceConfig) -> Result<DeviceEnum, DeviceError> {
         match config.backend.as_str() {
             "nut" => Ok(Self::NutDevice(nut::new_nut_device(config))),
             "dummy" => Ok(Self::DummyDevice(dummy::new_dummy_device(config))),
@@ -73,7 +67,6 @@ impl DeviceEnum
     }
 }
 
-pub enum DeviceError
-{
-    InvalidBackend
+pub enum DeviceError {
+    InvalidBackend,
 }
