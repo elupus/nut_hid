@@ -11,8 +11,9 @@ use windows::Win32::Devices::Enumeration::Pnp::SwDeviceClose;
 use windows::Win32::Foundation::S_OK;
 use windows::{
     Win32::Devices::Enumeration::Pnp::{
-        HSWDEVICE, SW_DEVICE_CREATE_INFO, SWDeviceCapabilitiesDriverRequired,
-        SWDeviceCapabilitiesRemovable, SWDeviceCapabilitiesSilentInstall, SwDeviceCreate,
+        HSWDEVICE, SW_DEVICE_CREATE_INFO, SW_DEVICE_LIFETIME, SWDeviceCapabilitiesDriverRequired,
+        SWDeviceCapabilitiesRemovable, SWDeviceCapabilitiesSilentInstall, SWDeviceLifetimeHandle,
+        SWDeviceLifetimeParentPresent, SwDeviceCreate, SwDeviceSetLifetime,
     },
     core::HRESULT,
 };
@@ -21,12 +22,18 @@ use windows_strings::{PCWSTR, w};
 
 type CallbackData = Result<String, HRESULT>;
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 /// Simple program to greet a person
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Args)]
+struct CreateArgs {
     /// Backend to use
     #[arg(long, default_value = "dummy")]
     backend: String,
@@ -38,6 +45,19 @@ struct Args {
     /// Port to connect to if supported
     #[arg(long, default_value_t = 3493)]
     port: u32,
+
+    /// How long to wait before removing device
+    #[arg(long)]
+    delay: Option<u64>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Create a new device
+    Create(CreateArgs),
+
+    /// Delete a installed device
+    Delete,
 }
 
 struct HswDevice {
@@ -63,7 +83,9 @@ impl HswDevice {
         context: *const c_void,
         device_instance_id: PCWSTR,
     ) {
-        println!("Device created");
+        println!("Device created: {}", unsafe {
+            device_instance_id.to_string().unwrap()
+        });
 
         let sender = context as *const Sender<CallbackData>;
         unsafe {
@@ -103,12 +125,17 @@ impl HswDevice {
             sender: sender,
         })
     }
+
+    fn set_lifetime(&self, lifetime: SW_DEVICE_LIFETIME) -> Result<(), HRESULT> {
+        unsafe {
+            SwDeviceSetLifetime(self.handle, lifetime)?;
+            Ok(())
+        }
+    }
 }
 
-fn main() {
+fn create(args: CreateArgs) {
     println!("Creating device");
-
-    let args = Args::parse();
 
     let mut properties = PropertiesStore::new();
 
@@ -151,8 +178,30 @@ fn main() {
         .unwrap()
         .unwrap();
 
-    println!("Waiting for use of device {device_instance_id}");
-    sleep(Duration::from_secs(30));
-
+    if args.delay.is_some() {
+        println!("Waiting for use of device {device_instance_id}");
+        device.set_lifetime(SWDeviceLifetimeHandle).unwrap();
+        sleep(Duration::from_secs(args.delay.unwrap()));
+    } else {
+        println!("Leaving device connected");
+        device.set_lifetime(SWDeviceLifetimeParentPresent).unwrap();
+    }
     drop(device);
+}
+
+fn delete() {
+    println!("Please use pnputil /remove-device <INSTANCE_ID>");
+}
+
+fn main() {
+    let args = Cli::parse();
+
+    match args.command {
+        Commands::Create(create_args) => {
+            create(create_args);
+        }
+        Commands::Delete => {
+            delete();
+        }
+    }
 }
