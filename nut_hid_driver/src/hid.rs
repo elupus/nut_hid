@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use wdk_sys::{
     FILE_ANY_ACCESS, FILE_DEVICE_KEYBOARD, METHOD_BUFFERED, METHOD_IN_DIRECT, METHOD_NEITHER,
     METHOD_OUT_DIRECT,
@@ -10,12 +12,9 @@ pub const fn CTL_CODE(device_type: u32, function: u32, method: u32, access: u32)
     return (device_type << 16) | (access << 14) | (function << 2) | method;
 }
 
+//
 // Macro for defining HID ioctls
 //
-//#define HID_CTL_CODE(id)            CTL_CODE(FILE_DEVICE_KEYBOARD, (id), METHOD_NEITHER, FILE_ANY_ACCESS)
-//#define HID_BUFFER_CTL_CODE(id)     CTL_CODE(FILE_DEVICE_KEYBOARD, (id), METHOD_BUFFERED, FILE_ANY_ACCESS)
-//#define HID_IN_CTL_CODE(id)         CTL_CODE(FILE_DEVICE_KEYBOARD, (id), METHOD_IN_DIRECT, FILE_ANY_ACCESS)
-//#define HID_OUT_CTL_CODE(id)        CTL_CODE(FILE_DEVICE_KEYBOARD, (id), METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
 #[allow(non_snake_case)]
 pub const fn HID_CTL_CODE(id: u32) -> u32 {

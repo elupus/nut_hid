@@ -287,7 +287,6 @@ struct Identification {
 
 pub struct DummyDevice {
     device: RwLock<DeviceData>,
-    device_config: DeviceConfig,
     pending: Mutex<VecDeque<(u8, Vec<u8>)>>,
 }
 
@@ -320,7 +319,7 @@ fn struct_to_vec<T: BinarySerde>(data: T) -> Vec<u8> {
         .into()
 }
 
-pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
+pub fn new_dummy_device(_device_config: DeviceConfig) -> DummyDevice {
     info!("Creating Dummy backend");
     let mut device = DeviceData {
         reports: HashMap::new(),
@@ -370,7 +369,6 @@ pub fn new_dummy_device(device_config: DeviceConfig) -> DummyDevice {
 
     DummyDevice {
         device: RwLock::new(device),
-        device_config: device_config,
         pending: Mutex::new(VecDeque::new()),
     }
 }

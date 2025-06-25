@@ -1,6 +1,5 @@
 use std::ffi::CStr;
 use std::slice;
-use std::sync::Arc;
 use std::{ffi::c_void, ptr};
 
 use log::{debug, warn};
@@ -156,6 +155,8 @@ unsafe impl Sync for WdfRequest {}
 pub struct WdfMemory(pub WDFMEMORY);
 
 impl WdfMemory {
+    #![allow(unused)]
+
     pub fn get_buffer(&self) -> &[u8] {
         unsafe {
             let mut len: usize = 0;
