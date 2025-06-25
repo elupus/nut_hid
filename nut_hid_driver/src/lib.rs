@@ -511,7 +511,7 @@ fn evt_io_device_control_device(
     io_control_code: ULONG,
     device: &dyn Device,
 ) -> Result<(), NTSTATUS> {
-    debug!("io device control in worker {io_control_code}");
+    debug!("io device control {io_control_code}");
 
     match io_control_code {
         IOCTL_HID_GET_REPORT_DESCRIPTOR => {
@@ -589,8 +589,6 @@ fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> Sender<(u32, W
         info!("Worker thread started");
         loop {
             let (io_control_code, mut request) = receiver.recv().unwrap();
-
-            info!("Worker thread got {}", io_control_code);
             match evt_io_device_control_device(&mut request, io_control_code, &*device) {
                 Ok(()) => request.complete(STATUS_SUCCESS),
                 Err(e) => request.complete(e),
