@@ -7,7 +7,7 @@ use super::*;
 use binary_serde::recursive_array::RecursiveArray;
 use binary_serde::{BinarySerde, BitfieldBitOrder, Endianness, binary_serde_bitfield};
 use constants::*;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use rups::blocking::Connection;
 use rups::{ClientError, ConfigBuilder, NutError};
@@ -232,28 +232,62 @@ fn connect(config: &DeviceConfig) -> Result<(Connection, String), ClientError> {
 }
 
 impl NutState {
-    fn get_u8(&mut self, value: &str) -> Option<u8> {
-        let connection = self.connection.as_mut().unwrap();
-        if let Ok(var) = connection.get_var(&self.name, value) {
-            return u8::from_str_radix(&var.value(), 10).ok();
+    fn get_u8(&mut self, variable: &str) -> Result<Option<u8>, ClientError> {
+        if let Some(value) = self.get_str(variable)? {
+            return Ok(u8::from_str_radix(&value, 10).ok());
         }
-        None
+        Ok(None)
     }
 
-    fn get_str(&mut self, value: &str) -> Option<String> {
+    fn get_str(&mut self, variable: &str) -> Result<Option<String>, ClientError> {
         let connection = self.connection.as_mut().unwrap();
-        let value = match connection.get_var(&self.name, value) {
+        match connection.get_var(&self.name, variable) {
             Err(ClientError::Nut(NutError::VarNotSupported)) => {
-                debug!("Variable {} not supported", value);
-                None
+                debug!("Variable {} not supported", variable);
+                return Ok(None);
+            }
+            Err(ClientError::Nut(NutError::Generic(err))) if err.contains("VAR-NOT-SUPPORTED") => {
+                debug!("Variable {} not supported", variable);
+                return Ok(None);
             }
             Err(err) => {
-                error!("Failed to get {}: {}", value, err);
-                None
+                error!("Failed to get {}: {}", variable, err);
+                return Err(err);
             }
-            Ok(status) => Some(status.value()),
+            Ok(status) => {
+                return Ok(Some(status.value()));
+            }
         };
-        value
+    }
+
+    fn update(&mut self) -> Result<(), ClientError> {
+        if let Some(value) = self.get_u8("battery.charge")? {
+            self.pending
+                .push_back((REPORT_ID_REMAININGCAPACITY, vec![value]));
+        }
+
+        if let Some(value) = self.get_u8("battery.charge.low")? {
+            self.pending
+                .push_back((REPORT_ID_REMNCAPACITYLIMIT, vec![value]));
+        }
+
+        if let Some(value) = self.get_u8("battery.runtime")? {
+            self.pending
+                .push_back((REPORT_ID_RUNTIMETOEMPTY, vec![value / 60]));
+        }
+
+        let ups_status = self.get_str("ups.status")?.or(Some("".into())).unwrap();
+        let battery_charger_status = self
+            .get_str("battery_charger_status")?
+            .or(Some("".into()))
+            .unwrap();
+
+        let present_status = PresentStatus::from_status(&ups_status, &battery_charger_status);
+        debug!("Present status: {:?}", present_status);
+
+        self.pending
+            .push_back((REPORT_ID_PRESENTSTATUS, struct_to_vec(present_status)));
+        Ok(())
     }
 }
 
@@ -279,6 +313,18 @@ impl PresentStatus {
     }
 }
 
+impl NutDevice {
+    fn lost_connection_report() -> (u8, Vec<u8>) {
+        (
+            REPORT_ID_PRESENTSTATUS,
+            struct_to_vec(PresentStatus {
+                communication_lost: true,
+                ..Default::default()
+            }),
+        )
+    }
+}
+
 impl Device for NutDevice {
     fn data(&self) -> &RwLock<DeviceData> {
         &self.device
@@ -298,47 +344,25 @@ impl Device for NutDevice {
             let (connection, name) = match connect(&self.device_config) {
                 Err(err) => {
                     error!("Failed to connect {:?}", err);
-                    state
-                        .pending
-                        .push_back((REPORT_ID_REMAININGCAPACITY, vec![0]));
-                    return state.pending.pop_front();
+                    return Some(NutDevice::lost_connection_report());
                 }
-                Ok(result) => result,
+                Ok((connection, name)) => (connection, name),
             };
             state.connection = Some(connection);
             state.name = name;
         }
 
-        if let Some(value) = state.get_u8("battery.charge") {
-            state
-                .pending
-                .push_back((REPORT_ID_REMAININGCAPACITY, vec![value]));
+        if let Err(err) = state.update() {
+            error!("Failed to update state: {}", err);
+            let connection = state.connection.take().unwrap();
+
+            if let Err(err) = connection.close() {
+                warn!("Failed to close connection: {}", err);
+            }
+
+            state.pending.clear();
+            return Some(NutDevice::lost_connection_report());
         }
-
-        if let Some(value) = state.get_u8("battery.charge.low") {
-            state
-                .pending
-                .push_back((REPORT_ID_REMNCAPACITYLIMIT, vec![value]));
-        }
-
-        if let Some(value) = state.get_u8("battery.runtime") {
-            state
-                .pending
-                .push_back((REPORT_ID_RUNTIMETOEMPTY, vec![value / 60]));
-        }
-
-        let ups_status = state.get_str("ups.status").or(Some("".into())).unwrap();
-        let battery_charger_status = state
-            .get_str("battery_charger_status")
-            .or(Some("".into()))
-            .unwrap();
-
-        let present_status = PresentStatus::from_status(&ups_status, &battery_charger_status);
-        debug!("Present status: {:?}", present_status);
-
-        state
-            .pending
-            .push_back((REPORT_ID_PRESENTSTATUS, struct_to_vec(present_status)));
 
         state.pending.pop_front()
     }
