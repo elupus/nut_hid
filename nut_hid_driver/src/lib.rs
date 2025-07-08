@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::thread::{self};
+use std::thread::{self, JoinHandle};
 use std::{os::windows::ffi::OsStrExt, slice, string::String};
 
 use wdk_sys::STATUS_NOT_SUPPORTED;
@@ -27,12 +27,26 @@ use wdf::*;
 
 use std::ffi::OsStr;
 
+struct AutoDropHandle(Option<JoinHandle<()>>);
+
+impl Drop for AutoDropHandle {
+    fn drop(&mut self) {
+        debug!("Joining thread");
+        self.0.take().unwrap().join().unwrap();
+        debug!("Thread joined");
+    }
+}
+
 struct DeviceContext<'a> {
     hid_device: Arc<dyn Device + 'a>,
     hid_device_desc: HID_DESCRIPTOR,
     hid_device_attr: HID_DEVICE_ATTRIBUTES,
     worker: Sender<(u32, WdfRequest)>,
+
+    #[allow(unused)] 
+    worker_handle: AutoDropHandle
 }
+
 
 // TODO this must be static
 const DEVICE_CONTEXT_TYPE_INFO: WDF_OBJECT_CONTEXT_TYPE_INFO =
@@ -214,7 +228,7 @@ extern "C" fn evt_driver_device_add(
     };
     drop(hid_data);
 
-    let worker = create_device_worker(hid_device.clone());
+    let (worker, worker_handle) = create_device_worker(hid_device.clone());
 
     debug!(
         "Creating device context for: {:#?}, {:#?}",
@@ -225,6 +239,7 @@ extern "C" fn evt_driver_device_add(
         hid_device_desc: hid_device_desc,
         hid_device_attr: hid_device_attr,
         worker: worker,
+        worker_handle: AutoDropHandle(Some(worker_handle))
     };
 
     DeviceContext::init(device as WDFOBJECT, Some(Arc::new(context)));
@@ -582,10 +597,10 @@ fn create_default_queue(device: WDFDEVICE) -> Result<WDFQUEUE, NTSTATUS> {
     return Ok(queue);
 }
 
-fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> Sender<(u32, WdfRequest)> {
+fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> (Sender<(u32, WdfRequest)>, JoinHandle<()>) {
     info!("Spawning worker thread");
     let (sender, receiver) = channel();
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         info!("Worker thread started");
         for (io_control_code, mut request) in receiver {
             match evt_io_device_control_device(&mut request, io_control_code, &*device) {
@@ -596,5 +611,5 @@ fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> Sender<(u32, W
         info!("Worker thread closing");
     });
 
-    sender
+    (sender, handle)
 }
