@@ -315,7 +315,7 @@ extern "C" fn evt_io_device_control(
     }
 }
 
-fn get_report(memory: &WdfMemory) -> Result<(u8, &[u8]), NTSTATUS> {
+fn get_report<'a>(memory: &'a WdfMemory) -> Result<(u8, &'a [u8]), NTSTATUS> {
     let buffer = memory.get_buffer();
     let len = buffer.len();
     if len < 1 {

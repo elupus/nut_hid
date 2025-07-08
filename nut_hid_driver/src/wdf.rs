@@ -14,6 +14,7 @@ use wdk_sys::{
     STATUS_BUFFER_TOO_SMALL, STATUS_SUCCESS, WDF_DEVICE_PROPERTY_DATA,
 };
 
+use std::marker::PhantomData;
 use crate::backports::from_utf16le_lossy;
 
 pub fn wdf_object_attributes_init() -> WDF_OBJECT_ATTRIBUTES {
@@ -100,7 +101,7 @@ pub trait WdfContext {
 pub struct WdfRequest(pub WDFREQUEST);
 
 impl WdfRequest {
-    pub fn get_input_memory(&self) -> Result<WdfMemory, NTSTATUS> {
+    pub fn get_input_memory<'a>(&'a self) -> Result<WdfMemory<'a>, NTSTATUS> {
         let mut memory: WDFMEMORY = ptr::null_mut::<WDFMEMORY__>();
 
         let status;
@@ -116,10 +117,10 @@ impl WdfRequest {
             return Err(status);
         }
         assert!(!memory.is_null());
-        Ok(WdfMemory(memory))
+        Ok(WdfMemory {memory: memory, lifetime: PhantomData})
     }
 
-    pub fn get_output_memory(&self) -> Result<WdfMemory, NTSTATUS> {
+    pub fn get_output_memory<'a>(&'a self) -> Result<WdfMemory<'a>, NTSTATUS> {
         let mut memory: WDFMEMORY = ptr::null_mut::<WDFMEMORY__>();
 
         let status;
@@ -135,7 +136,7 @@ impl WdfRequest {
             return Err(status);
         }
         assert!(!memory.is_null());
-        Ok(WdfMemory(memory))
+        Ok(WdfMemory {memory: memory, lifetime: PhantomData})
     }
 
     pub fn set_information(&mut self, len: usize) {
@@ -152,23 +153,28 @@ impl WdfRequest {
 unsafe impl Send for WdfRequest {}
 unsafe impl Sync for WdfRequest {}
 
-pub struct WdfMemory(pub WDFMEMORY);
+pub struct WdfMemory<'a>
+{
+    memory: WDFMEMORY,
+    lifetime: PhantomData<&'a WdfRequest>
+}
 
-impl WdfMemory {
+
+impl<'a> WdfMemory<'a> {
     #![allow(unused)]
 
-    pub fn get_buffer(&self) -> &[u8] {
+    pub fn get_buffer(&'a self) -> &'a [u8] {
         unsafe {
             let mut len: usize = 0;
-            let buf = call_unsafe_wdf_function_binding!(WdfMemoryGetBuffer, self.0, &mut len);
+            let buf = call_unsafe_wdf_function_binding!(WdfMemoryGetBuffer, self.memory, &mut len);
             slice::from_raw_parts(buf as *const u8, len)
         }
     }
 
-    pub fn get_buffer_mut(&mut self) -> &mut [u8] {
+    pub fn get_buffer_mut(&'a mut self) -> &'a mut [u8] {
         unsafe {
             let mut len: usize = 0;
-            let buf = call_unsafe_wdf_function_binding!(WdfMemoryGetBuffer, self.0, &mut len);
+            let buf = call_unsafe_wdf_function_binding!(WdfMemoryGetBuffer, self.memory, &mut len);
             slice::from_raw_parts_mut(buf as *mut u8, len)
         }
     }
@@ -180,7 +186,7 @@ impl WdfMemory {
         unsafe {
             status = call_unsafe_wdf_function_binding!(
                 WdfMemoryCopyFromBuffer,
-                self.0,
+                self.memory,
                 offset,
                 ptr as *mut c_void,
                 len
