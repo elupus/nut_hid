@@ -601,14 +601,14 @@ fn create_device_worker(device: Arc<dyn Device + Send + Sync>) -> (Sender<(u32, 
     info!("Spawning worker thread");
     let (sender, receiver) = channel();
     let handle = thread::spawn(move || {
-        info!("Worker thread started");
+        debug!("Worker thread started");
         for (io_control_code, mut request) in receiver {
             match evt_io_device_control_device(&mut request, io_control_code, &*device) {
                 Ok(()) => request.complete(STATUS_SUCCESS),
                 Err(e) => request.complete(e),
             }
         }
-        info!("Worker thread closing");
+        debug!("Worker thread closing");
     });
 
     (sender, handle)
